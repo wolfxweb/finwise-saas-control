@@ -1,6 +1,7 @@
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Link, useLocation } from "react-router-dom";
 import { 
   LayoutDashboard, 
   TrendingUp, 
@@ -30,30 +31,31 @@ interface SidebarProps {
 }
 
 const navigation = [
-  { name: "Dashboard", icon: LayoutDashboard, href: "#", current: true },
+  { name: "Dashboard", icon: LayoutDashboard, href: "/", current: true },
 ];
 
 const financialNavigation = [
-  { name: "Fluxo de Caixa", icon: TrendingUp, href: "#" },
-  { name: "Contas a Receber", icon: CreditCard, href: "#" },
-  { name: "Contas a Pagar", icon: TrendingDown, href: "#" },
-  { name: "Centro de Custos", icon: PieChart, href: "#" },
+  { name: "Fluxo de Caixa", icon: TrendingUp, href: "/fluxo-caixa" },
+  { name: "Contas a Receber", icon: CreditCard, href: "/contas-receber" },
+  { name: "Contas a Pagar", icon: TrendingDown, href: "/contas-pagar" },
+  { name: "Centro de Custos", icon: PieChart, href: "/centro-custos" },
 ];
 
 const systemNavigation = [
-  { name: "Produtos", icon: Package, href: "#" },
-  { name: "Gestão de Estoque", icon: Calculator, href: "#" },
-  { name: "Compras", icon: ShoppingCart, href: "#" },
-  { name: "Expedição", icon: Truck, href: "#" },
-  { name: "Pedidos", icon: ClipboardList, href: "#" },
-  { name: "Marketplace", icon: Store, href: "#" },
-  { name: "Nota Fiscal", icon: Receipt, href: "#" },
-  { name: "Usuários", icon: Users, href: "#" },
-  { name: "Atendimento", icon: Headphones, href: "#" },
+  { name: "Produtos", icon: Package, href: "/produtos" },
+  { name: "Gestão de Estoque", icon: Calculator, href: "/estoque" },
+  { name: "Compras", icon: ShoppingCart, href: "/compras" },
+  { name: "Expedição", icon: Truck, href: "/expedicao" },
+  { name: "Pedidos", icon: ClipboardList, href: "/pedidos" },
+  { name: "Marketplace", icon: Store, href: "/marketplace" },
+  { name: "Nota Fiscal", icon: Receipt, href: "/nota-fiscal" },
+  { name: "Usuários", icon: Users, href: "/usuarios" },
+  { name: "Atendimento", icon: Headphones, href: "/atendimento" },
 ];
 
 export function Sidebar({ className }: SidebarProps) {
   const [financialOpen, setFinancialOpen] = useState(false);
+  const location = useLocation();
 
   return (
     <div className={cn("pb-12 min-h-screen", className)}>
@@ -69,18 +71,19 @@ export function Sidebar({ className }: SidebarProps) {
           <div className="space-y-1">
             {/* Dashboard */}
             {navigation.map((item) => (
-              <Button
-                key={item.name}
-                variant={item.current ? "default" : "ghost"}
-                className={cn(
-                  "w-full justify-start",
-                  item.current
-                    ? "bg-gradient-primary text-primary-foreground shadow-card"
-                    : "text-muted-foreground hover:text-foreground hover:bg-secondary/50"
-                )}
-              >
-                <item.icon className="mr-2 h-4 w-4" />
-                {item.name}
+              <Button key={item.name} asChild>
+                <Link
+                  to={item.href}
+                  className={cn(
+                    "w-full justify-start",
+                    location.pathname === item.href
+                      ? "bg-gradient-primary text-primary-foreground shadow-card"
+                      : "text-muted-foreground hover:text-foreground hover:bg-secondary/50"
+                  )}
+                >
+                  <item.icon className="mr-2 h-4 w-4" />
+                  {item.name}
+                </Link>
               </Button>
             ))}
 
@@ -98,14 +101,14 @@ export function Sidebar({ className }: SidebarProps) {
               </CollapsibleTrigger>
               <CollapsibleContent className="space-y-1 pl-4">
                 {financialNavigation.map((item) => (
-                  <Button
-                    key={item.name}
-                    variant="ghost"
-                    size="sm"
-                    className="w-full justify-start text-muted-foreground hover:text-foreground hover:bg-secondary/50"
-                  >
-                    <item.icon className="mr-2 h-3 w-3" />
-                    {item.name}
+                  <Button key={item.name} asChild variant="ghost" size="sm">
+                    <Link
+                      to={item.href}
+                      className="w-full justify-start text-muted-foreground hover:text-foreground hover:bg-secondary/50"
+                    >
+                      <item.icon className="mr-2 h-3 w-3" />
+                      {item.name}
+                    </Link>
                   </Button>
                 ))}
               </CollapsibleContent>
@@ -113,13 +116,14 @@ export function Sidebar({ className }: SidebarProps) {
 
             {/* Outras funcionalidades */}
             {systemNavigation.map((item) => (
-              <Button
-                key={item.name}
-                variant="ghost"
-                className="w-full justify-start text-muted-foreground hover:text-foreground hover:bg-secondary/50"
-              >
-                <item.icon className="mr-2 h-4 w-4" />
-                {item.name}
+              <Button key={item.name} asChild variant="ghost">
+                <Link
+                  to={item.href}
+                  className="w-full justify-start text-muted-foreground hover:text-foreground hover:bg-secondary/50"
+                >
+                  <item.icon className="mr-2 h-4 w-4" />
+                  {item.name}
+                </Link>
               </Button>
             ))}
           </div>
