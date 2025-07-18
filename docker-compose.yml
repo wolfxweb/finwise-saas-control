@@ -1,0 +1,77 @@
+# Docker Compose para FinanceMax
+
+services:
+  # Banco de dados PostgreSQL
+  postgres:
+    image: postgres:15-alpine
+    container_name: finwise_postgres
+    environment:
+      POSTGRES_DB: finwise_db
+      POSTGRES_USER: finwise_user
+      POSTGRES_PASSWORD: finwise_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - finwise_network
+
+  # Backend FastAPI
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: finwise_backend
+    environment:
+      DATABASE_URL: postgresql://finwise_user:finwise_password@postgres:5432/finwise_db
+      SECRET_KEY: your-secret-key-here
+      ALGORITHM: HS256
+      ACCESS_TOKEN_EXPIRE_MINUTES: 30
+    ports:
+      - "8000:8000"
+    depends_on:
+      - postgres
+    volumes:
+      - ./backend:/app
+    networks:
+      - finwise_network
+    restart: unless-stopped
+
+  # Frontend React
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    container_name: finwise_frontend
+    ports:
+      - "8080:8080"
+    depends_on:
+      - backend
+    environment:
+      VITE_API_URL: http://localhost:8000
+    networks:
+      - finwise_network
+    restart: unless-stopped
+
+  # Nginx (opcional - para produção)
+  nginx:
+    image: nginx:alpine
+    container_name: finwise_nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf
+    depends_on:
+      - frontend
+      - backend
+    networks:
+      - finwise_network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+
+networks:
+  finwise_network:
+    driver: bridge 

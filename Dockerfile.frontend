@@ -1,0 +1,39 @@
+# Multi-stage build para o Frontend React
+FROM node:20-alpine AS builder
+
+# Instala dependências necessárias para compilação
+RUN apk add --no-cache python3 make g++
+
+# Define o diretório de trabalho
+WORKDIR /app
+
+# Copia os arquivos de dependências
+COPY package*.json ./
+COPY bun.lockb ./
+
+# Instala as dependências (incluindo devDependencies para build)
+RUN npm ci --legacy-peer-deps
+
+# Copia o código fonte
+COPY . .
+
+# Constrói a aplicação
+RUN npm run build
+
+# Stage de produção
+FROM node:20-alpine AS production
+
+# Instala servidor para produção
+RUN npm install -g serve
+
+# Define o diretório de trabalho
+WORKDIR /app
+
+# Copia os arquivos buildados do stage anterior
+COPY --from=builder /app/dist ./dist
+
+# Expõe a porta
+EXPOSE 8080
+
+# Comando para executar a aplicação
+CMD ["serve", "-s", "dist", "-l", "8080"] 
