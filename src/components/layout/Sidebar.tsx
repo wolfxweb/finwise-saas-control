@@ -22,7 +22,8 @@ import {
   Headphones,
   ClipboardList,
   Store,
-  Receipt
+  Receipt,
+  Handshake
 } from "lucide-react";
 import { useState } from "react";
 
@@ -44,6 +45,7 @@ const financialNavigation = [
 const systemNavigation = [
   { name: "Produtos", icon: Package, href: "/produtos" },
   { name: "Gestão de Estoque", icon: Calculator, href: "/estoque" },
+  { name: "Fornecedores", icon: Handshake, href: "/fornecedores" },
   { name: "Compras", icon: ShoppingCart, href: "/compras" },
   { name: "Expedição", icon: Truck, href: "/expedicao" },
   { name: "Pedidos", icon: ClipboardList, href: "/pedidos" },
@@ -58,24 +60,24 @@ export function Sidebar({ className }: SidebarProps) {
   const location = useLocation();
 
   return (
-    <div className={cn("pb-12 min-h-screen", className)}>
+    <div className={cn("pb-12 min-h-screen text-left", className)}>
       <div className="space-y-4 py-4">
         <div className="px-3 py-2">
           <div className="flex items-center space-x-2 px-3 mb-8">
             <div className="w-8 h-8 bg-gradient-primary rounded-lg flex items-center justify-center">
               <TrendingUp className="h-5 w-5 text-primary-foreground" />
             </div>
-            <h2 className="text-lg font-bold text-foreground">FinanceMax</h2>
+            <h2 className="text-lg font-bold text-foreground text-left">FinanceMax</h2>
           </div>
           
-          <div className="space-y-1">
+          <div className="space-y-1 text-left">
             {/* Dashboard */}
             {navigation.map((item) => (
-              <Button key={item.name} asChild>
+              <Button key={item.name} asChild className="w-full justify-start text-left">
                 <Link
                   to={item.href}
                   className={cn(
-                    "w-full justify-start",
+                    "w-full justify-start text-left",
                     location.pathname === item.href
                       ? "bg-gradient-primary text-primary-foreground shadow-card"
                       : "text-muted-foreground hover:text-foreground hover:bg-secondary/50"
@@ -92,19 +94,19 @@ export function Sidebar({ className }: SidebarProps) {
               <CollapsibleTrigger asChild>
                 <Button
                   variant="ghost"
-                  className="w-full justify-start text-muted-foreground hover:text-foreground hover:bg-secondary/50"
+                  className="w-full justify-start text-left text-muted-foreground hover:text-foreground hover:bg-secondary/50"
                 >
                   <DollarSign className="mr-2 h-4 w-4" />
                   Financeiro
                   <ChevronDown className={cn("ml-auto h-4 w-4 transition-transform duration-200", financialOpen && "rotate-180")} />
                 </Button>
               </CollapsibleTrigger>
-              <CollapsibleContent className="space-y-1 pl-4">
+              <CollapsibleContent className="space-y-1 pl-4 text-left">
                 {financialNavigation.map((item) => (
-                  <Button key={item.name} asChild variant="ghost" size="sm">
+                  <Button key={item.name} asChild variant="ghost" size="sm" className="w-full justify-start text-left">
                     <Link
                       to={item.href}
-                      className="w-full justify-start text-muted-foreground hover:text-foreground hover:bg-secondary/50"
+                      className="w-full justify-start text-left text-muted-foreground hover:text-foreground hover:bg-secondary/50"
                     >
                       <item.icon className="mr-2 h-3 w-3" />
                       {item.name}
@@ -116,10 +118,10 @@ export function Sidebar({ className }: SidebarProps) {
 
             {/* Outras funcionalidades */}
             {systemNavigation.map((item) => (
-              <Button key={item.name} asChild variant="ghost">
+              <Button key={item.name} asChild variant="ghost" className="w-full justify-start text-left">
                 <Link
                   to={item.href}
-                  className="w-full justify-start text-muted-foreground hover:text-foreground hover:bg-secondary/50"
+                  className="w-full justify-start text-left text-muted-foreground hover:text-foreground hover:bg-secondary/50"
                 >
                   <item.icon className="mr-2 h-4 w-4" />
                   {item.name}
@@ -130,8 +132,8 @@ export function Sidebar({ className }: SidebarProps) {
         </div>
         
         <div className="px-3 py-2">
-          <div className="space-y-1">
-            <Button variant="ghost" className="w-full justify-start text-muted-foreground hover:text-foreground">
+          <div className="space-y-1 text-left">
+            <Button variant="ghost" className="w-full justify-start text-left text-muted-foreground hover:text-foreground">
               <Settings className="mr-2 h-4 w-4" />
               Configurações
             </Button>
