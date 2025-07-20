@@ -57,6 +57,11 @@ class CompanySubscription(Base):
     total_price = Column(Numeric(10, 2), nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    
+    # Relacionamentos
+    company = relationship("Company")
+    plan = relationship("Plan")
+    invoices = relationship("Invoice", back_populates="subscription", cascade="all, delete-orphan")
 
 class CompanyModule(Base):
     __tablename__ = "company_modules"

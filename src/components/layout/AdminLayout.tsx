@@ -11,7 +11,9 @@ import {
   LogOut,
   Shield,
   BarChart3,
-  FileText
+  FileText,
+  DollarSign,
+  Briefcase
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -49,6 +51,16 @@ const AdminLayout = () => {
       title: "Módulos",
       href: "/admin/modules",
       icon: Package,
+    },
+    {
+      title: "Planos das Empresas",
+      href: "/admin/company-plans",
+      icon: Briefcase,
+    },
+    {
+      title: "Financeiro",
+      href: "/admin/billing",
+      icon: DollarSign,
     },
     {
       title: "Analytics",

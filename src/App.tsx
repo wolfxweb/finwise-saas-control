@@ -16,6 +16,8 @@ import AdminDashboard from "./pages/admin/AdminDashboard";
 import CompaniesManagement from "./pages/admin/CompaniesManagement";
 import PlansManagement from "./pages/admin/PlansManagement";
 import ModulesManagement from "./pages/admin/ModulesManagement";
+import BillingManagement from "./pages/admin/BillingManagement";
+import CompanyPlansManagement from "./pages/admin/CompanyPlansManagement";
 import Analytics from "./pages/admin/Analytics";
 import UsersManagement from "./pages/admin/UsersManagement";
 import Reports from "./pages/admin/Reports";
@@ -73,6 +75,8 @@ const App = () => (
               <Route path="users" element={<UsersManagement />} />
               <Route path="plans" element={<PlansManagement />} />
               <Route path="modules" element={<ModulesManagement />} />
+              <Route path="company-plans" element={<CompanyPlansManagement />} />
+              <Route path="billing" element={<BillingManagement />} />
               <Route path="analytics" element={<Analytics />} />
               <Route path="reports" element={<Reports />} />
               <Route path="settings" element={<Settings />} />

@@ -272,6 +272,32 @@ export const adminAPI = {
   removeModuleFromPlan: async (planId: string, moduleId: string) => {
     const response = await api.delete(`/api/v1/admin/plans/${planId}/modules/${moduleId}`);
     return response.data;
+  },
+
+  // Métodos para billing
+  getBillingSummary: async () => {
+    const response = await api.get('/api/v1/billing/billing/summary');
+    return response.data;
+  },
+
+  getRecentInvoices: async (limit: number = 10) => {
+    const response = await api.get(`/api/v1/billing/billing/recent?limit=${limit}`);
+    return response.data;
+  },
+
+  getOverdueInvoices: async () => {
+    const response = await api.get('/api/v1/billing/billing/overdue');
+    return response.data;
+  },
+
+  generateMonthlyInvoices: async () => {
+    const response = await api.post('/api/v1/billing/billing/generate-monthly-invoices');
+    return response.data;
+  },
+
+  markInvoiceAsPaid: async (invoiceId: string, paymentMethod: string = 'manual') => {
+    const response = await api.post(`/api/v1/billing/invoices/${invoiceId}/mark-paid?payment_method=${paymentMethod}`);
+    return response.data;
   }
 };
 

@@ -20,15 +20,18 @@ const AdminLogin = () => {
 
   // Redireciona automaticamente se já estiver autenticado como admin master
   useEffect(() => {
+    console.log('AdminLogin useEffect:', { isAuthenticated, user, authLoading });
+    
     if (
       isAuthenticated &&
       user &&
       user.role === 'admin' &&
       user.company_id === MASTER_COMPANY_ID
     ) {
+      console.log('Redirecionando para dashboard...');
       navigate('/admin/dashboard', { replace: true });
     }
-  }, [isAuthenticated, user, navigate]);
+  }, [isAuthenticated, user, navigate, authLoading]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -36,11 +39,17 @@ const AdminLogin = () => {
     setError('');
 
     try {
+      console.log('Tentando fazer login com:', email);
       const success = await login(email, password);
+      console.log('Resultado do login:', success);
+      
       if (!success) {
         setError('Credenciais inválidas. Verifique seu email e senha.');
+      } else {
+        console.log('Login bem-sucedido, aguardando redirecionamento...');
       }
     } catch (error) {
+      console.error('Erro no handleSubmit:', error);
       setError('Erro ao fazer login. Tente novamente.');
     } finally {
       setIsLoading(false);
