@@ -1,142 +1,279 @@
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Link, useLocation } from "react-router-dom";
-import { 
-  LayoutDashboard, 
-  TrendingUp, 
-  TrendingDown, 
-  CreditCard,
-  FileText,
-  Settings,
-  Building,
-  PieChart,
-  Calculator,
-  Users,
-  ChevronDown,
+import { useAuth } from "@/contexts/AuthContext";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { useLocation, useNavigate } from "react-router-dom";
+import {
+  LayoutDashboard,
   DollarSign,
   Package,
-  ShoppingCart,
   Truck,
-  UserCog,
-  Headphones,
-  ClipboardList,
+  ShoppingCart,
+  FileText,
+  Users,
+  HeadphonesIcon,
   Store,
+  Building2,
+  ChevronDown,
+  ChevronRight,
+  Settings,
+  BarChart3,
+  CreditCard,
+  Calculator,
+  Warehouse,
+  ClipboardList,
+  ShoppingBag,
   Receipt,
-  Handshake
+  UserCheck,
+  MessageCircle
 } from "lucide-react";
 import { useState } from "react";
 
-interface SidebarProps {
-  className?: string;
+interface MenuItem {
+  title: string;
+  href: string;
+  icon: React.ComponentType<{ className?: string }>;
+  module?: string;
+  permission?: string;
+  children?: MenuItem[];
 }
 
-const navigation = [
-  { name: "Dashboard", icon: LayoutDashboard, href: "/", current: true },
+const menuItems: MenuItem[] = [
+  {
+    title: "Dashboard",
+    href: "/app",
+    icon: LayoutDashboard,
+  },
+  {
+    title: "Financeiro",
+    href: "#",
+    icon: DollarSign,
+    children: [
+      {
+        title: "Fluxo de Caixa",
+        href: "/app/fluxo-caixa",
+        icon: BarChart3,
+        module: "cash_flow",
+      },
+      {
+        title: "Contas a Receber",
+        href: "/app/contas-receber",
+        icon: CreditCard,
+        module: "accounts_receivable",
+      },
+      {
+        title: "Contas a Pagar",
+        href: "/app/contas-pagar",
+        icon: Calculator,
+        module: "accounts_payable",
+      },
+      {
+        title: "Centro de Custos",
+        href: "/app/centro-custos",
+        icon: Building2,
+        module: "cost_center",
+      },
+    ],
+  },
+  {
+    title: "Produtos",
+    href: "/app/produtos",
+    icon: Package,
+    module: "products",
+  },
+  {
+    title: "Gestão de Estoque",
+    href: "/app/estoque",
+    icon: Warehouse,
+    module: "inventory",
+  },
+  {
+    title: "Fornecedores",
+    href: "/app/fornecedores",
+    icon: Building2,
+    module: "suppliers",
+  },
+  {
+    title: "Compras",
+    href: "/app/compras",
+    icon: ShoppingCart,
+    module: "purchases",
+  },
+  {
+    title: "Expedição",
+    href: "/app/expedicao",
+    icon: Truck,
+    module: "shipping",
+  },
+  {
+    title: "Pedidos",
+    href: "/app/pedidos",
+    icon: ClipboardList,
+    module: "orders",
+  },
+  {
+    title: "Marketplace",
+    href: "/app/marketplace",
+    icon: Store,
+    module: "marketplace",
+  },
+  {
+    title: "Nota Fiscal",
+    href: "/app/nota-fiscal",
+    icon: Receipt,
+    module: "invoice",
+  },
+  {
+    title: "Usuários",
+    href: "/app/usuarios",
+    icon: UserCheck,
+    module: "users",
+    permission: "users:read",
+  },
+  {
+    title: "Atendimento",
+    href: "/app/atendimento",
+    icon: MessageCircle,
+    module: "support",
+  },
+  {
+    title: "Configurações",
+    href: "/app/configuracoes",
+    icon: Settings,
+  },
 ];
 
-const financialNavigation = [
-  { name: "Fluxo de Caixa", icon: TrendingUp, href: "/fluxo-caixa" },
-  { name: "Contas a Receber", icon: CreditCard, href: "/contas-receber" },
-  { name: "Contas a Pagar", icon: TrendingDown, href: "/contas-pagar" },
-  { name: "Centro de Custos", icon: PieChart, href: "/centro-custos" },
-];
-
-const systemNavigation = [
-  { name: "Produtos", icon: Package, href: "/produtos" },
-  { name: "Gestão de Estoque", icon: Calculator, href: "/estoque" },
-  { name: "Fornecedores", icon: Handshake, href: "/fornecedores" },
-  { name: "Compras", icon: ShoppingCart, href: "/compras" },
-  { name: "Expedição", icon: Truck, href: "/expedicao" },
-  { name: "Pedidos", icon: ClipboardList, href: "/pedidos" },
-  { name: "Marketplace", icon: Store, href: "/marketplace" },
-  { name: "Nota Fiscal", icon: Receipt, href: "/nota-fiscal" },
-  { name: "Usuários", icon: Users, href: "/usuarios" },
-  { name: "Atendimento", icon: Headphones, href: "/atendimento" },
-];
+interface SidebarProps extends React.HTMLAttributes<HTMLDivElement> {}
 
 export function Sidebar({ className }: SidebarProps) {
-  const [financialOpen, setFinancialOpen] = useState(false);
+  const { user, company } = useAuth();
   const location = useLocation();
+  const navigate = useNavigate();
+  const [expandedItems, setExpandedItems] = useState<string[]>([]);
+
+  // Adicionar painel admin apenas para master admin
+  const allMenuItems = [
+    ...menuItems,
+    // Painel Admin apenas para master admin
+    ...(user?.company_id === '53b3051a-5d5f-4748-a475-b4447c49aeac' ? [{
+      title: "Painel Admin",
+      href: "/app/admin",
+      icon: Settings,
+      permission: "admin:access",
+    }] : []),
+  ];
+
+  const hasModuleAccess = (module?: string) => {
+    if (!module) return true;
+    return company?.modules?.includes(module) || false;
+  };
+
+  const hasPermission = (permission?: string) => {
+    if (!permission) return true;
+    return user?.permissions?.includes(permission) || false;
+  };
+
+  const toggleExpanded = (title: string) => {
+    setExpandedItems(prev =>
+      prev.includes(title)
+        ? prev.filter(item => item !== title)
+        : [...prev, title]
+    );
+  };
+
+  const isActive = (href: string) => {
+    if (href === "/app") {
+      return location.pathname === "/app";
+    }
+    return location.pathname.startsWith(href);
+  };
+
+  const renderMenuItem = (item: MenuItem) => {
+    // Verificar se o usuário tem acesso ao módulo
+    if (!hasModuleAccess(item.module) || !hasPermission(item.permission)) {
+      return null;
+    }
+
+    const isExpanded = expandedItems.includes(item.title);
+    const hasChildren = item.children && item.children.length > 0;
+    const isItemActive = isActive(item.href);
+
+    if (hasChildren) {
+      const accessibleChildren = item.children.filter(child =>
+        hasModuleAccess(child.module) && hasPermission(child.permission)
+      );
+
+      if (accessibleChildren.length === 0) {
+        return null;
+      }
+
+      return (
+        <div key={item.title}>
+          <Button
+            variant="ghost"
+            className={cn(
+              "w-full justify-between h-10 px-2",
+              isItemActive && "bg-accent"
+            )}
+            onClick={() => toggleExpanded(item.title)}
+          >
+            <div className="flex items-center gap-2">
+              <item.icon className="h-4 w-4" />
+              <span className="text-sm font-medium">{item.title}</span>
+            </div>
+            {isExpanded ? (
+              <ChevronDown className="h-4 w-4" />
+            ) : (
+              <ChevronRight className="h-4 w-4" />
+            )}
+          </Button>
+          {isExpanded && (
+            <div className="ml-4 space-y-1">
+              {accessibleChildren.map((child) => (
+                <Button
+                  key={child.href}
+                  variant="ghost"
+                  className={cn(
+                    "w-full justify-start h-8 px-2 text-sm",
+                    isActive(child.href) && "bg-accent"
+                  )}
+                  onClick={() => navigate(child.href)}
+                >
+                  <child.icon className="h-4 w-4 mr-2" />
+                  {child.title}
+                </Button>
+              ))}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    return (
+      <Button
+        key={item.href}
+        variant="ghost"
+        className={cn(
+          "w-full justify-start h-10 px-2",
+          isItemActive && "bg-accent"
+        )}
+        onClick={() => navigate(item.href)}
+      >
+        <item.icon className="h-4 w-4 mr-2" />
+        <span className="text-sm font-medium">{item.title}</span>
+      </Button>
+    );
+  };
 
   return (
-    <div className={cn("pb-12 min-h-screen text-left", className)}>
+    <div className={cn("pb-12", className)}>
       <div className="space-y-4 py-4">
         <div className="px-3 py-2">
-          <div className="flex items-center space-x-2 px-3 mb-8">
-            <div className="w-8 h-8 bg-gradient-primary rounded-lg flex items-center justify-center">
-              <TrendingUp className="h-5 w-5 text-primary-foreground" />
-            </div>
-            <h2 className="text-lg font-bold text-foreground text-left">FinanceMax</h2>
-          </div>
-          
-          <div className="space-y-1 text-left">
-            {/* Dashboard */}
-            {navigation.map((item) => (
-              <Button key={item.name} asChild className="w-full justify-start text-left">
-                <Link
-                  to={item.href}
-                  className={cn(
-                    "w-full justify-start text-left",
-                    location.pathname === item.href
-                      ? "bg-gradient-primary text-primary-foreground shadow-card"
-                      : "text-muted-foreground hover:text-foreground hover:bg-secondary/50"
-                  )}
-                >
-                  <item.icon className="mr-2 h-4 w-4" />
-                  {item.name}
-                </Link>
-              </Button>
-            ))}
-
-            {/* Financeiro Submenu */}
-            <Collapsible open={financialOpen} onOpenChange={setFinancialOpen}>
-              <CollapsibleTrigger asChild>
-                <Button
-                  variant="ghost"
-                  className="w-full justify-start text-left text-muted-foreground hover:text-foreground hover:bg-secondary/50"
-                >
-                  <DollarSign className="mr-2 h-4 w-4" />
-                  Financeiro
-                  <ChevronDown className={cn("ml-auto h-4 w-4 transition-transform duration-200", financialOpen && "rotate-180")} />
-                </Button>
-              </CollapsibleTrigger>
-              <CollapsibleContent className="space-y-1 pl-4 text-left">
-                {financialNavigation.map((item) => (
-                  <Button key={item.name} asChild variant="ghost" size="sm" className="w-full justify-start text-left">
-                    <Link
-                      to={item.href}
-                      className="w-full justify-start text-left text-muted-foreground hover:text-foreground hover:bg-secondary/50"
-                    >
-                      <item.icon className="mr-2 h-3 w-3" />
-                      {item.name}
-                    </Link>
-                  </Button>
-                ))}
-              </CollapsibleContent>
-            </Collapsible>
-
-            {/* Outras funcionalidades */}
-            {systemNavigation.map((item) => (
-              <Button key={item.name} asChild variant="ghost" className="w-full justify-start text-left">
-                <Link
-                  to={item.href}
-                  className="w-full justify-start text-left text-muted-foreground hover:text-foreground hover:bg-secondary/50"
-                >
-                  <item.icon className="mr-2 h-4 w-4" />
-                  {item.name}
-                </Link>
-              </Button>
-            ))}
-          </div>
-        </div>
-        
-        <div className="px-3 py-2">
-          <div className="space-y-1 text-left">
-            <Button variant="ghost" className="w-full justify-start text-left text-muted-foreground hover:text-foreground">
-              <Settings className="mr-2 h-4 w-4" />
-              Configurações
-            </Button>
+          <h2 className="mb-2 px-4 text-lg font-semibold tracking-tight">
+            FinanceMax
+          </h2>
+          <div className="space-y-1">
+            {allMenuItems.map(renderMenuItem)}
           </div>
         </div>
       </div>

@@ -17,6 +17,10 @@ RUN npm ci --legacy-peer-deps
 # Copia o código fonte
 COPY . .
 
+# Define a variável de ambiente para o build
+ARG VITE_API_URL
+ENV VITE_API_URL=${VITE_API_URL}
+
 # Constrói a aplicação
 RUN npm run build
 
