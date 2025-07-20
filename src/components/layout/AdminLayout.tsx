@@ -5,15 +5,13 @@ import {
   Building2, 
   Users, 
   CreditCard, 
-  Package, 
   TrendingUp, 
   Settings,
   LogOut,
   Shield,
   BarChart3,
   FileText,
-  DollarSign,
-  Briefcase
+  DollarSign
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -46,16 +44,6 @@ const AdminLayout = () => {
       title: "Planos",
       href: "/admin/plans",
       icon: CreditCard,
-    },
-    {
-      title: "Módulos",
-      href: "/admin/modules",
-      icon: Package,
-    },
-    {
-      title: "Planos das Empresas",
-      href: "/admin/company-plans",
-      icon: Briefcase,
     },
     {
       title: "Financeiro",

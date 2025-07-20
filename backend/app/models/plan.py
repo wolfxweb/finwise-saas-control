@@ -61,7 +61,6 @@ class CompanySubscription(Base):
     # Relacionamentos
     company = relationship("Company")
     plan = relationship("Plan")
-    invoices = relationship("Invoice", back_populates="subscription", cascade="all, delete-orphan")
 
 class CompanyModule(Base):
     __tablename__ = "company_modules"

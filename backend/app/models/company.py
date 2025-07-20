@@ -26,8 +26,6 @@ class Company(Base):
     # Relacionamentos
     users = relationship("User", back_populates="company")
     branches = relationship("Branch", back_populates="company")
-    invoices = relationship("Invoice", back_populates="company", cascade="all, delete-orphan")
-    billing_settings = relationship("BillingSettings", back_populates="company", uselist=False, cascade="all, delete-orphan")
 
 class Branch(Base):
     __tablename__ = "branches"

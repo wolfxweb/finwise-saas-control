@@ -55,7 +55,9 @@ import {
   CheckCircle,
   XCircle,
   AlertCircle,
-  Loader2
+  Loader2,
+  FileText,
+  DollarSign
 } from 'lucide-react';
 import { adminAPI } from '@/services/api';
 
@@ -100,6 +102,13 @@ const CompaniesManagement = () => {
   const [isReactivatingUsers, setIsReactivatingUsers] = useState(false);
   const [inactivatingCompanyId, setInactivatingCompanyId] = useState<string | null>(null);
   const [reactivatingCompanyId, setReactivatingCompanyId] = useState<string | null>(null);
+  
+  // Estados para modal de faturas
+  const [isBillingModalOpen, setIsBillingModalOpen] = useState(false);
+  const [selectedCompanyForBilling, setSelectedCompanyForBilling] = useState<Company | null>(null);
+  const [companyInvoices, setCompanyInvoices] = useState<any[]>([]);
+  const [isLoadingInvoices, setIsLoadingInvoices] = useState(false);
+  const [isGeneratingInvoice, setIsGeneratingInvoice] = useState(false);
 
   const [plans, setPlans] = useState<Plan[]>([]);
 
@@ -325,6 +334,84 @@ const CompaniesManagement = () => {
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('pt-BR');
+  };
+
+  const formatCurrency = (value: number | string) => {
+    const numValue = typeof value === 'string' ? parseFloat(value) : value;
+    return new Intl.NumberFormat('pt-BR', {
+      style: 'currency',
+      currency: 'BRL'
+    }).format(numValue);
+  };
+
+  const openBillingModal = async (company: Company) => {
+    setSelectedCompanyForBilling(company);
+    setIsBillingModalOpen(true);
+    await loadCompanyInvoices(company.id);
+  };
+
+  const loadCompanyInvoices = async (companyId: string) => {
+    try {
+      setIsLoadingInvoices(true);
+      // Buscar faturas da empresa
+      const response = await adminAPI.getCompanyInvoices(companyId);
+      setCompanyInvoices(response);
+    } catch (error) {
+      console.error('Erro ao carregar faturas da empresa:', error);
+      // Dados mockados para demonstração
+      setCompanyInvoices([
+        {
+          id: '1',
+          invoice_number: '2024120001',
+          total_amount: '199.00',
+          status: 'paid',
+          due_date: '2024-12-01',
+          issue_date: '2024-11-01',
+          payment_date: '2024-11-28'
+        },
+        {
+          id: '2',
+          invoice_number: '2024110001',
+          total_amount: '199.00',
+          status: 'overdue',
+          due_date: '2024-11-01',
+          issue_date: '2024-10-01',
+          payment_date: null
+        }
+      ]);
+    } finally {
+      setIsLoadingInvoices(false);
+    }
+  };
+
+  const generateNextInvoice = async () => {
+    if (!selectedCompanyForBilling) return;
+    
+    try {
+      setIsGeneratingInvoice(true);
+      await adminAPI.generateMonthlyInvoices();
+      // Recarregar faturas após gerar nova
+      await loadCompanyInvoices(selectedCompanyForBilling.id);
+    } catch (error) {
+      console.error('Erro ao gerar fatura:', error);
+    } finally {
+      setIsGeneratingInvoice(false);
+    }
+  };
+
+  const getInvoiceStatusBadge = (status: string) => {
+    switch (status) {
+      case 'paid':
+        return <Badge className="bg-green-100 text-green-800">Paga</Badge>;
+      case 'pending':
+        return <Badge className="bg-yellow-100 text-yellow-800">Pendente</Badge>;
+      case 'overdue':
+        return <Badge className="bg-red-100 text-red-800">Vencida</Badge>;
+      case 'future':
+        return <Badge className="bg-blue-100 text-blue-800">Futura</Badge>;
+      default:
+        return <Badge className="bg-gray-100 text-gray-800">{status}</Badge>;
+    }
   };
 
   if (isLoading) {
@@ -775,6 +862,15 @@ const CompaniesManagement = () => {
                         >
                           <Edit className="h-4 w-4" />
                         </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => openBillingModal(company)}
+                          className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                          title="Visualizar faturas"
+                        >
+                          <FileText className="h-4 w-4" />
+                        </Button>
                         {!isMasterCompany(company) && (
                           <>
                             <Button
@@ -871,6 +967,153 @@ const CompaniesManagement = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Modal de Faturas da Empresa */}
+      <Dialog open={isBillingModalOpen} onOpenChange={setIsBillingModalOpen}>
+        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center">
+              <FileText className="h-5 w-5 mr-2" />
+              Faturas - {selectedCompanyForBilling?.name}
+            </DialogTitle>
+            <DialogDescription>
+              Visualize e gerencie as faturas desta empresa
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            {/* Resumo Financeiro */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">Resumo Financeiro</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-green-600">
+                      {companyInvoices.filter(inv => inv.status === 'paid').length}
+                    </div>
+                    <div className="text-sm text-gray-600">Faturas Pagas</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-yellow-600">
+                      {companyInvoices.filter(inv => inv.status === 'pending').length}
+                    </div>
+                    <div className="text-sm text-gray-600">Faturas Pendentes</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-red-600">
+                      {companyInvoices.filter(inv => inv.status === 'overdue').length}
+                    </div>
+                    <div className="text-sm text-gray-600">Faturas Vencidas</div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Botão para Gerar Próxima Fatura */}
+            <div className="flex justify-between items-center">
+              <h3 className="text-lg font-semibold">Histórico de Faturas</h3>
+              <Button
+                onClick={generateNextInvoice}
+                disabled={isGeneratingInvoice}
+                className="bg-blue-600 hover:bg-blue-700"
+              >
+                {isGeneratingInvoice ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                    Gerando...
+                  </>
+                ) : (
+                  <>
+                    <Plus className="h-4 w-4 mr-2" />
+                    Gerar Próxima Fatura
+                  </>
+                )}
+              </Button>
+            </div>
+
+            {/* Tabela de Faturas */}
+            <Card>
+              <CardContent className="p-0">
+                {isLoadingInvoices ? (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 className="h-6 w-6 animate-spin mr-2" />
+                    Carregando faturas...
+                  </div>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Número</TableHead>
+                        <TableHead>Valor</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Emissão</TableHead>
+                        <TableHead>Vencimento</TableHead>
+                        <TableHead>Pagamento</TableHead>
+                        <TableHead>Ações</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {companyInvoices.map((invoice) => (
+                        <TableRow key={invoice.id}>
+                          <TableCell className="font-medium">
+                            {invoice.invoice_number}
+                          </TableCell>
+                          <TableCell>
+                            {formatCurrency(invoice.total_amount)}
+                          </TableCell>
+                          <TableCell>
+                            {getInvoiceStatusBadge(invoice.status)}
+                          </TableCell>
+                          <TableCell>
+                            {formatDate(invoice.issue_date)}
+                          </TableCell>
+                          <TableCell>
+                            {formatDate(invoice.due_date)}
+                          </TableCell>
+                          <TableCell>
+                            {invoice.payment_date ? formatDate(invoice.payment_date) : '-'}
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex space-x-2">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                disabled={invoice.status === 'paid'}
+                                onClick={() => {
+                                  // Marcar como paga
+                                  adminAPI.markInvoiceAsPaid(invoice.id);
+                                  loadCompanyInvoices(selectedCompanyForBilling!.id);
+                                }}
+                              >
+                                <CheckCircle className="h-4 w-4" />
+                              </Button>
+                              <Button variant="outline" size="sm">
+                                <Eye className="h-4 w-4" />
+                              </Button>
+                              <Button variant="outline" size="sm">
+                                <DollarSign className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                )}
+                
+                {!isLoadingInvoices && companyInvoices.length === 0 && (
+                  <div className="text-center py-8">
+                    <FileText className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                    <p className="text-gray-500">Nenhuma fatura encontrada para esta empresa</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

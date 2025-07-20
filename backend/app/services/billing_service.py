@@ -226,42 +226,74 @@ class BillingService:
         """Obter resumo de cobrança"""
         today = date.today()
         
-        # Total de faturas
-        total_invoices = self.db.query(Invoice).count()
+        # Total de faturas (excluindo empresa master)
+        total_invoices = self.db.query(Invoice).join(Company).filter(
+            Company.id != 1
+        ).count()
         
         # Faturas pagas
-        paid_invoices = self.db.query(Invoice).filter(
-            Invoice.status == "paid"
+        paid_invoices = self.db.query(Invoice).join(Company).filter(
+            and_(
+                Invoice.status == "paid",
+                Company.id != 1
+            )
         ).count()
         
         # Faturas pendentes
-        pending_invoices = self.db.query(Invoice).filter(
-            Invoice.status == "pending"
+        pending_invoices = self.db.query(Invoice).join(Company).filter(
+            and_(
+                Invoice.status == "pending",
+                Company.id != 1
+            )
         ).count()
         
         # Faturas vencidas
-        overdue_invoices = self.db.query(Invoice).filter(
+        overdue_invoices = self.db.query(Invoice).join(Company).filter(
             and_(
                 Invoice.status == "pending",
-                Invoice.due_date < today
+                Invoice.due_date < today,
+                Company.id != 1
+            )
+        ).count()
+        
+        # Empresas em trial
+        trial_companies = self.db.query(CompanySubscription).filter(
+            and_(
+                CompanySubscription.status == "trial",
+                CompanySubscription.company_id != 1
             )
         ).count()
         
         # Receita total
-        total_revenue = self.db.query(func.sum(Invoice.total_amount)).filter(
-            Invoice.status == "paid"
+        total_revenue = self.db.query(func.sum(Invoice.total_amount)).join(Company).filter(
+            and_(
+                Invoice.status == "paid",
+                Company.id != 1
+            )
         ).scalar() or Decimal('0')
         
         # Receita pendente
-        pending_revenue = self.db.query(func.sum(Invoice.total_amount)).filter(
-            Invoice.status == "pending"
+        pending_revenue = self.db.query(func.sum(Invoice.total_amount)).join(Company).filter(
+            and_(
+                Invoice.status == "pending",
+                Company.id != 1
+            )
         ).scalar() or Decimal('0')
         
         # Receita vencida
-        overdue_revenue = self.db.query(func.sum(Invoice.total_amount)).filter(
+        overdue_revenue = self.db.query(func.sum(Invoice.total_amount)).join(Company).filter(
             and_(
                 Invoice.status == "pending",
-                Invoice.due_date < today
+                Invoice.due_date < today,
+                Company.id != 1
+            )
+        ).scalar() or Decimal('0')
+        
+        # Receita potencial de trials
+        trial_revenue = self.db.query(func.sum(CompanySubscription.total_price)).filter(
+            and_(
+                CompanySubscription.status == "trial",
+                CompanySubscription.company_id != 1
             )
         ).scalar() or Decimal('0')
         
@@ -270,9 +302,11 @@ class BillingService:
             "paid_invoices": paid_invoices,
             "pending_invoices": pending_invoices,
             "overdue_invoices": overdue_invoices,
-            "total_revenue": total_revenue,
-            "pending_revenue": pending_revenue,
-            "overdue_revenue": overdue_revenue
+            "trial_companies": trial_companies,
+            "total_revenue": str(total_revenue),
+            "pending_revenue": str(pending_revenue),
+            "overdue_revenue": str(overdue_revenue),
+            "trial_revenue": str(trial_revenue)
         }
 
     def mark_invoice_as_paid(self, invoice_id: UUID, payment_method: str = "manual") -> Optional[Invoice]:
@@ -299,8 +333,9 @@ class BillingService:
         self.db.refresh(invoice)
         return invoice
 
-    def get_recent_invoices(self, limit: int = 10) -> List[Dict[str, Any]]:
-        """Obter faturas recentes"""
+    def get_recent_invoices(self, limit: int = 50) -> List[Dict[str, Any]]:
+        """Obter faturas recentes e futuras (excluindo empresa master)"""
+        # Excluir empresa master (company_id = 1)
         recent_invoices = self.db.query(
             Invoice.id,
             Invoice.invoice_number,
@@ -310,22 +345,76 @@ class BillingService:
             Invoice.issue_date,
             Invoice.payment_date,
             Company.name.label('company_name'),
-            Company.id.label('company_id')
-        ).join(Company).order_by(
-            Invoice.created_at.desc()
+            Company.id.label('company_id'),
+            Company.email.label('company_email')
+        ).join(Company).filter(
+            Company.id != 1  # Excluir empresa master
+        ).order_by(
+            Invoice.due_date.asc()
         ).limit(limit).all()
         
         return [
             {
-                "id": invoice.id,
+                "id": str(invoice.id),
                 "invoice_number": invoice.invoice_number,
                 "company_name": invoice.company_name,
-                "company_id": invoice.company_id,
-                "total_amount": invoice.total_amount,
+                "company_id": str(invoice.company_id),
+                "total_amount": str(invoice.total_amount),
                 "status": invoice.status,
-                "due_date": invoice.due_date,
-                "issue_date": invoice.issue_date,
-                "payment_date": invoice.payment_date
+                "due_date": invoice.due_date.isoformat(),
+                "issue_date": invoice.issue_date.isoformat(),
+                "payment_date": invoice.payment_date.isoformat() if invoice.payment_date else None,
+                "company_email": invoice.company_email
             }
             for invoice in recent_invoices
-        ] 
+        ]
+
+    def get_future_invoices(self, months_ahead: int = 3) -> List[Dict[str, Any]]:
+        """Obter faturas futuras para os próximos meses"""
+        today = date.today()
+        future_date = today + timedelta(days=months_ahead * 30)
+        
+        # Buscar empresas ativas (excluindo master)
+        active_companies = self.db.query(Company).filter(
+            and_(
+                Company.id != 1,  # Excluir empresa master
+                Company.status == "active"
+            )
+        ).all()
+        
+        future_invoices = []
+        
+        for company in active_companies:
+            # Buscar assinatura ativa
+            subscription = self.db.query(CompanySubscription).filter(
+                and_(
+                    CompanySubscription.company_id == company.id,
+                    CompanySubscription.status == "active"
+                )
+            ).first()
+            
+            if not subscription:
+                continue
+            
+            # Gerar faturas futuras para os próximos meses
+            for i in range(1, months_ahead + 1):
+                billing_date = today.replace(day=1) + timedelta(days=32 * i)
+                billing_date = billing_date.replace(day=1)
+                due_date = billing_date.replace(day=15)  # Vencimento no dia 15
+                
+                if due_date <= future_date:
+                    future_invoices.append({
+                        "id": f"future_{company.id}_{i}",
+                        "invoice_number": f"FUT{billing_date.strftime('%Y%m')}{i:02d}",
+                        "company_name": company.name,
+                        "company_id": str(company.id),
+                        "total_amount": str(subscription.total_price),
+                        "status": "future",
+                        "due_date": due_date.isoformat(),
+                        "issue_date": billing_date.isoformat(),
+                        "payment_date": None,
+                        "company_email": company.email,
+                        "is_future": True
+                    })
+        
+        return future_invoices 

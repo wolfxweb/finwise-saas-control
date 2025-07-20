@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from .core.config import settings
 from .core.database import engine, Base
-from .api.v1 import auth, admin, company, billing
+from .api.v1 import auth, admin, company, billing, suppliers
 
 # Criar tabelas no banco de dados
 Base.metadata.create_all(bind=engine)
@@ -28,6 +28,7 @@ app.include_router(auth.router, prefix=f"{settings.API_V1_STR}/auth", tags=["aut
 app.include_router(admin.router, prefix=f"{settings.API_V1_STR}/admin", tags=["administration"])
 app.include_router(company.router, prefix=f"{settings.API_V1_STR}/company", tags=["company"])
 app.include_router(billing.router, prefix=f"{settings.API_V1_STR}/billing", tags=["billing"])
+app.include_router(suppliers.router, prefix=f"{settings.API_V1_STR}/suppliers", tags=["suppliers"])
 
 @app.get("/")
 async def root():

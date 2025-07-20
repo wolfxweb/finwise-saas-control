@@ -40,8 +40,8 @@ class Invoice(Base):
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     
     # Relacionamentos
-    company = relationship("Company", back_populates="invoices")
-    subscription = relationship("CompanySubscription", back_populates="invoices")
+    company = relationship("Company")
+    subscription = relationship("CompanySubscription")
     items = relationship("InvoiceItem", back_populates="invoice", cascade="all, delete-orphan")
     payments = relationship("Payment", back_populates="invoice", cascade="all, delete-orphan")
 
@@ -116,4 +116,4 @@ class BillingSettings(Base):
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     
     # Relacionamentos
-    company = relationship("Company", back_populates="billing_settings") 
+    company = relationship("Company") 

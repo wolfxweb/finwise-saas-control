@@ -36,6 +36,17 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+// Função para obter módulos baseado no plano
+const getPlanModules = (planType: string): string[] => {
+  const planModules = {
+    'Básico': ['cash_flow', 'accounts_receivable', 'products', 'inventory'],
+    'Profissional': ['cash_flow', 'accounts_receivable', 'accounts_payable', 'cost_center', 'products', 'inventory', 'suppliers', 'purchases'],
+    'Empresarial': ['cash_flow', 'accounts_receivable', 'accounts_payable', 'cost_center', 'products', 'inventory', 'suppliers', 'purchases', 'shipping', 'orders', 'marketplace', 'invoice', 'users', 'support']
+  };
+  
+  return planModules[planType as keyof typeof planModules] || planModules['Básico'];
+};
+
 export const useAuth = () => {
   const context = useContext(AuthContext);
   if (context === undefined) {
@@ -106,13 +117,27 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         try {
           const companyResponse = await api.get(`/api/v1/company/profile`);
           const companyData = companyResponse.data;
+          
+          // Definir módulos baseado no plano da empresa
+          const planModules = getPlanModules(companyData.plan_type);
+          
           setCompany({
             ...companyData,
-            modules: modules || []
+            modules: modules || planModules
           });
         } catch (companyError) {
           console.error('Erro ao buscar dados da empresa:', companyError);
-          setCompany(null);
+          // Fallback: definir módulos baseado no plano se disponível
+          const planModules = getPlanModules(userData.plan_type);
+          setCompany({
+            id: userData.company_id,
+            name: userData.company_name || '',
+            corporate_name: '',
+            cnpj: '',
+            status: 'active',
+            plan_type: userData.plan_type || 'Básico',
+            modules: modules || planModules
+          });
         }
       } else {
         // Para admin master, definir empresa como null
@@ -168,13 +193,27 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         try {
           const companyResponse = await api.get(`/api/v1/company/profile`);
           const companyData = companyResponse.data;
+          
+          // Definir módulos baseado no plano da empresa
+          const planModules = getPlanModules(companyData.plan_type);
+          
           setCompany({
             ...companyData,
-            modules: companyData.modules || []
+            modules: companyData.modules || planModules
           });
         } catch (companyError) {
           console.error('Erro ao buscar dados da empresa:', companyError);
-          setCompany(null);
+          // Fallback: definir módulos baseado no plano se disponível
+          const planModules = getPlanModules(userData.plan_type);
+          setCompany({
+            id: userData.company_id,
+            name: userData.company_name || '',
+            corporate_name: '',
+            cnpj: '',
+            status: 'active',
+            plan_type: userData.plan_type || 'Básico',
+            modules: planModules
+          });
         }
       } else {
         // Para admin master, definir empresa como null

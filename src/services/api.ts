@@ -280,8 +280,13 @@ export const adminAPI = {
     return response.data;
   },
 
-  getRecentInvoices: async (limit: number = 10) => {
+  getRecentInvoices: async (limit: number = 50) => {
     const response = await api.get(`/api/v1/billing/billing/recent?limit=${limit}`);
+    return response.data;
+  },
+
+  getFutureInvoices: async (monthsAhead: number = 3) => {
+    const response = await api.get(`/api/v1/billing/billing/future?months_ahead=${monthsAhead}`);
     return response.data;
   },
 
@@ -298,7 +303,63 @@ export const adminAPI = {
   markInvoiceAsPaid: async (invoiceId: string, paymentMethod: string = 'manual') => {
     const response = await api.post(`/api/v1/billing/invoices/${invoiceId}/mark-paid?payment_method=${paymentMethod}`);
     return response.data;
+  },
+
+  getCompanyInvoices: async (companyId: string) => {
+    const response = await api.get(`/api/v1/billing/invoices?company_id=${companyId}`);
+    return response.data;
   }
+};
+
+// Funções de API para fornecedores
+export const supplierAPI = {
+  getSuppliers: async (params?: {
+    page?: number;
+    limit?: number;
+    search?: string;
+    status?: string;
+    category?: string;
+  }) => {
+    const response = await api.get('/api/v1/suppliers', { params });
+    return response.data;
+  },
+
+  getSupplier: async (id: string) => {
+    const response = await api.get(`/api/v1/suppliers/${id}`);
+    return response.data;
+  },
+
+  createSupplier: async (data: any) => {
+    const response = await api.post('/api/v1/suppliers', data);
+    return response.data;
+  },
+
+  updateSupplier: async (id: string, data: any) => {
+    const response = await api.put(`/api/v1/suppliers/${id}`, data);
+    return response.data;
+  },
+
+  deleteSupplier: async (id: string) => {
+    const response = await api.delete(`/api/v1/suppliers/${id}`);
+    return response.data;
+  },
+
+  getSupplierStats: async () => {
+    const response = await api.get('/api/v1/suppliers/stats/summary');
+    return response.data;
+  },
+
+  getSuppliersByCategory: async () => {
+    const response = await api.get('/api/v1/suppliers/stats/categories');
+    return response.data;
+  },
+
+  searchSuppliers: async (query: string) => {
+    const response = await api.get('/api/v1/suppliers/search/quick', {
+      params: { q: query }
+    });
+    return response.data;
+  },
 };
 
 export default api; 

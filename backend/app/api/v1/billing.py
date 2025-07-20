@@ -222,14 +222,25 @@ def get_overdue_invoices(
 
 @router.get("/billing/recent", response_model=List[InvoiceWithCompany])
 def get_recent_invoices(
-    limit: int = Query(10, description="Número de faturas recentes"),
+    limit: int = Query(50, description="Número de faturas recentes"),
     db: Session = Depends(get_db),
     current_user: User = Depends(verify_admin_access)
 ):
-    """Obter faturas recentes"""
+    """Obter faturas recentes (excluindo empresa master)"""
     billing_service = BillingService(db)
     recent_invoices = billing_service.get_recent_invoices(limit)
     return recent_invoices
+
+@router.get("/billing/future", response_model=List[InvoiceWithCompany])
+def get_future_invoices(
+    months_ahead: int = Query(3, description="Número de meses futuros"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(verify_admin_access)
+):
+    """Obter faturas futuras (excluindo empresa master)"""
+    billing_service = BillingService(db)
+    future_invoices = billing_service.get_future_invoices(months_ahead)
+    return future_invoices
 
 # Endpoints para Automação
 @router.post("/billing/generate-monthly-invoices")

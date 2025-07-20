@@ -141,6 +141,11 @@ const menuItems: MenuItem[] = [
     href: "/app/configuracoes",
     icon: Settings,
   },
+  {
+    title: "Meu Plano",
+    href: "/app/plano",
+    icon: Package,
+  },
 ];
 
 interface SidebarProps extends React.HTMLAttributes<HTMLDivElement> {}
