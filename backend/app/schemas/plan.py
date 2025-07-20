@@ -11,6 +11,8 @@ class PlanBase(BaseModel):
     billing_cycle: str = "monthly"
     max_users: int = 1
     max_branches: int = 1
+    max_invoices: Optional[int] = 0
+    marketplace_sync_limit: Optional[int] = 0
 
 class PlanCreate(PlanBase):
     pass
@@ -22,6 +24,8 @@ class PlanUpdate(BaseModel):
     billing_cycle: Optional[str] = None
     max_users: Optional[int] = None
     max_branches: Optional[int] = None
+    max_invoices: Optional[int] = None
+    marketplace_sync_limit: Optional[int] = None
     status: Optional[str] = None
 
 class Plan(PlanBase):

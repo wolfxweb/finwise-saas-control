@@ -45,6 +45,7 @@ import {
   UserX,
   MoreHorizontal
 } from 'lucide-react';
+import { adminAPI } from '@/services/api';
 
 interface User {
   id: string;
@@ -84,7 +85,11 @@ const UsersManagement = () => {
   const loadUsers = async () => {
     try {
       setIsLoading(true);
-      // Dados mockados para demonstração
+      const response = await adminAPI.getUsers();
+      setUsers(response);
+    } catch (error) {
+      console.error('Erro ao carregar usuários:', error);
+      // Em caso de erro, usar dados mockados como fallback
       const mockUsers: User[] = [
         {
           id: '1',
@@ -99,81 +104,9 @@ const UsersManagement = () => {
           created_at: '2024-01-01',
           permissions: ['all'],
           is_admin: true
-        },
-        {
-          id: '2',
-          name: 'Maria Santos',
-          email: 'maria@empresaabc.com',
-          phone: '(11) 88888-8888',
-          role: 'user',
-          company_name: 'Empresa ABC Ltda',
-          company_id: '1',
-          status: 'active',
-          last_login: '2024-01-14T15:45:00Z',
-          created_at: '2024-01-05',
-          permissions: ['finance', 'inventory'],
-          is_admin: false
-        },
-        {
-          id: '3',
-          name: 'Pedro Costa',
-          email: 'pedro@techsolutions.com',
-          phone: '(21) 77777-7777',
-          role: 'admin',
-          company_name: 'Tech Solutions',
-          company_id: '2',
-          status: 'active',
-          last_login: '2024-01-15T09:15:00Z',
-          created_at: '2024-02-01',
-          permissions: ['all'],
-          is_admin: true
-        },
-        {
-          id: '4',
-          name: 'Ana Oliveira',
-          email: 'ana@techsolutions.com',
-          role: 'user',
-          company_name: 'Tech Solutions',
-          company_id: '2',
-          status: 'inactive',
-          last_login: '2024-01-10T14:20:00Z',
-          created_at: '2024-02-05',
-          permissions: ['finance'],
-          is_admin: false
-        },
-        {
-          id: '5',
-          name: 'Carlos Ferreira',
-          email: 'carlos@xyz.com',
-          phone: '(31) 66666-6666',
-          role: 'user',
-          company_name: 'Comércio XYZ',
-          company_id: '3',
-          status: 'suspended',
-          last_login: '2024-01-08T11:30:00Z',
-          created_at: '2024-03-01',
-          permissions: ['inventory'],
-          is_admin: false
-        },
-        {
-          id: '6',
-          name: 'Lucia Mendes',
-          email: 'lucia@delta.com',
-          phone: '(41) 55555-5555',
-          role: 'admin',
-          company_name: 'Indústria Delta',
-          company_id: '4',
-          status: 'active',
-          last_login: '2024-01-15T16:00:00Z',
-          created_at: '2024-01-01',
-          permissions: ['all'],
-          is_admin: true
         }
       ];
-
       setUsers(mockUsers);
-    } catch (error) {
-      console.error('Erro ao carregar usuários:', error);
     } finally {
       setIsLoading(false);
     }

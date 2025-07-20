@@ -12,6 +12,17 @@ import {
   DialogTitle, 
   DialogTrigger 
 } from '@/components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 import { 
   Select,
   SelectContent,
@@ -82,12 +93,31 @@ const CompaniesManagement = () => {
   const [selectedCompany, setSelectedCompany] = useState<Company | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [companyToDelete, setCompanyToDelete] = useState<Company | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [isInactivatingUsers, setIsInactivatingUsers] = useState(false);
 
-  const plans: Plan[] = [
-    { id: '1', name: 'Básico', price: 99.00 },
-    { id: '2', name: 'Profissional', price: 199.00 },
-    { id: '3', name: 'Empresarial', price: 399.00 },
-  ];
+  const [plans, setPlans] = useState<Plan[]>([]);
+
+  useEffect(() => {
+    loadPlans();
+  }, []);
+
+  const loadPlans = async () => {
+    try {
+      const response = await adminAPI.getPlans();
+      setPlans(response);
+    } catch (error) {
+      console.error('Erro ao carregar planos:', error);
+      // Fallback para planos padrão
+      setPlans([
+        { id: '1', name: 'Básico', price: 99.00 },
+        { id: '2', name: 'Profissional', price: 199.00 },
+        { id: '3', name: 'Empresarial', price: 399.00 },
+      ]);
+    }
+  };
 
   useEffect(() => {
     loadCompanies();
@@ -100,7 +130,11 @@ const CompaniesManagement = () => {
   const loadCompanies = async () => {
     try {
       setIsLoading(true);
-      // Por enquanto, usar dados mockados
+      const response = await adminAPI.getCompanies();
+      setCompanies(response);
+    } catch (error) {
+      console.error('Erro ao carregar empresas:', error);
+      // Em caso de erro, usar dados mockados como fallback
       const mockCompanies: Company[] = [
         {
           id: '1',
@@ -118,63 +152,9 @@ const CompaniesManagement = () => {
           created_at: '2024-01-15',
           user_count: 8,
           revenue: 199.00
-        },
-        {
-          id: '2',
-          name: 'Tech Solutions',
-          corporate_name: 'Tech Solutions Tecnologia Ltda',
-          cnpj: '98.765.432/0001-10',
-          email: 'admin@techsolutions.com',
-          phone: '(21) 88888-8888',
-          address: 'Av. Paulista, 1000',
-          city: 'Rio de Janeiro',
-          state: 'RJ',
-          zip_code: '20000-000',
-          status: 'active',
-          plan_type: 'Empresarial',
-          created_at: '2024-02-20',
-          user_count: 25,
-          revenue: 399.00
-        },
-        {
-          id: '3',
-          name: 'Comércio XYZ',
-          corporate_name: 'Comércio XYZ Ltda',
-          cnpj: '11.222.333/0001-44',
-          email: 'contato@xyz.com',
-          phone: '(31) 77777-7777',
-          address: 'Rua do Comércio, 500',
-          city: 'Belo Horizonte',
-          state: 'MG',
-          zip_code: '30000-000',
-          status: 'suspended',
-          plan_type: 'Básico',
-          created_at: '2024-03-10',
-          user_count: 3,
-          revenue: 99.00
-        },
-        {
-          id: '4',
-          name: 'Indústria Delta',
-          corporate_name: 'Indústria Delta S.A.',
-          cnpj: '44.555.666/0001-77',
-          email: 'admin@delta.com',
-          phone: '(41) 66666-6666',
-          address: 'Av. Industrial, 2000',
-          city: 'Curitiba',
-          state: 'PR',
-          zip_code: '80000-000',
-          status: 'active',
-          plan_type: 'Empresarial',
-          created_at: '2024-01-05',
-          user_count: 45,
-          revenue: 399.00
         }
       ];
-
       setCompanies(mockCompanies);
-    } catch (error) {
-      console.error('Erro ao carregar empresas:', error);
     } finally {
       setIsLoading(false);
     }
@@ -233,28 +213,89 @@ const CompaniesManagement = () => {
 
   const handleStatusChange = async (companyId: string, newStatus: string) => {
     try {
-      // TODO: Implementar chamada real da API
-      console.log(`Alterando status da empresa ${companyId} para ${newStatus}`);
+      await adminAPI.updateCompanyStatus(companyId, newStatus);
       
+      // Atualizar o estado local
       setCompanies(prev => prev.map(company =>
         company.id === companyId ? { ...company, status: newStatus } : company
       ));
     } catch (error) {
       console.error('Erro ao alterar status:', error);
+      // Reverter a mudança em caso de erro
+      setCompanies(prev => prev.map(company =>
+        company.id === companyId ? { ...company, status: company.status } : company
+      ));
     }
   };
 
   const handlePlanChange = async (companyId: string, newPlan: string) => {
     try {
-      // TODO: Implementar chamada real da API
-      console.log(`Alterando plano da empresa ${companyId} para ${newPlan}`);
+      await adminAPI.updateCompanyPlan(companyId, newPlan);
       
+      // Atualizar o estado local
       setCompanies(prev => prev.map(company =>
         company.id === companyId ? { ...company, plan_type: newPlan } : company
       ));
     } catch (error) {
       console.error('Erro ao alterar plano:', error);
+      // Reverter a mudança em caso de erro
+      setCompanies(prev => prev.map(company =>
+        company.id === companyId ? { ...company, plan_type: company.plan_type } : company
+      ));
     }
+  };
+
+  const handleDeleteCompany = async () => {
+    if (!companyToDelete) return;
+    
+    try {
+      setIsDeleting(true);
+      await adminAPI.deleteCompany(companyToDelete.id);
+      
+      // Remover da lista local
+      setCompanies(prev => prev.filter(company => company.id !== companyToDelete.id));
+      
+      // Fechar modal
+      setIsDeleteDialogOpen(false);
+      setCompanyToDelete(null);
+      
+      alert('Empresa excluída com sucesso!');
+    } catch (error: any) {
+      console.error('Erro ao excluir empresa:', error);
+      const errorMessage = error.response?.data?.detail || 'Erro ao excluir empresa';
+      alert(`Erro: ${errorMessage}`);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const openDeleteDialog = (company: Company) => {
+    setCompanyToDelete(company);
+    setIsDeleteDialogOpen(true);
+  };
+
+  const handleInactivateAllUsers = async (company: Company) => {
+    try {
+      setIsInactivatingUsers(true);
+      const result = await adminAPI.inactivateAllUsers(company.id);
+      
+      // Atualizar a lista de empresas para refletir a mudança
+      setCompanies(prev => prev.map(c => 
+        c.id === company.id ? { ...c, user_count: 0 } : c
+      ));
+      
+      alert(result.message);
+    } catch (error: any) {
+      console.error('Erro ao inativar usuários:', error);
+      const errorMessage = error.response?.data?.detail || 'Erro ao inativar usuários';
+      alert(`Erro: ${errorMessage}`);
+    } finally {
+      setIsInactivatingUsers(false);
+    }
+  };
+
+  const isMasterCompany = (company: Company) => {
+    return company.cnpj === "00.000.000/0001-00";
   };
 
   const formatDate = (dateString: string) => {
@@ -341,10 +382,16 @@ const CompaniesManagement = () => {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              R$ {companies.reduce((sum, company) => sum + (company.revenue || 0), 0).toLocaleString()}
+              R$ {companies.reduce((sum, company) => {
+                const plan = plans.find(p => p.name === company.plan_type);
+                return sum + (plan?.price || 0);
+              }, 0).toLocaleString()}
             </div>
             <p className="text-xs text-muted-foreground">
-              Média de R$ {Math.round(companies.reduce((sum, company) => sum + (company.revenue || 0), 0) / companies.length)} por empresa
+              Média de R$ {companies.length > 0 ? Math.round(companies.reduce((sum, company) => {
+                const plan = plans.find(p => p.name === company.plan_type);
+                return sum + (plan?.price || 0);
+              }, 0) / companies.length) : 0} por empresa
             </p>
           </CardContent>
         </Card>
@@ -526,7 +573,7 @@ const CompaniesManagement = () => {
                     </TableCell>
                     <TableCell>
                       <div className="font-medium">
-                        R$ {(company.revenue || 0).toLocaleString()}
+                        R$ {(plans.find(p => p.name === company.plan_type)?.price || 0).toLocaleString()}
                       </div>
                     </TableCell>
                     <TableCell>
@@ -559,6 +606,33 @@ const CompaniesManagement = () => {
                         >
                           <Edit className="h-4 w-4" />
                         </Button>
+                        {!isMasterCompany(company) && (
+                          <>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleInactivateAllUsers(company)}
+                              disabled={isInactivatingUsers || company.user_count === 0}
+                              className="text-orange-600 hover:text-orange-700 hover:bg-orange-50"
+                              title="Inativar todos os usuários"
+                            >
+                              {isInactivatingUsers ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <Users className="h-4 w-4" />
+                              )}
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => openDeleteDialog(company)}
+                              className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                              title="Excluir empresa"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </>
+                        )}
                       </div>
                     </TableCell>
                   </TableRow>
@@ -575,6 +649,45 @@ const CompaniesManagement = () => {
           )}
         </CardContent>
       </Card>
+
+      {/* Modal de Confirmação de Exclusão */}
+      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirmar Exclusão</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja excluir a empresa <strong>{companyToDelete?.name}</strong>?
+              <br />
+              <br />
+              <span className="text-red-600 font-medium">
+                ⚠️ Esta ação não pode ser desfeita e excluirá:
+              </span>
+              <ul className="list-disc list-inside mt-2 text-sm">
+                <li>Todos os usuários da empresa</li>
+                <li>Todos os módulos ativos</li>
+                <li>Todos os dados associados</li>
+              </ul>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteCompany}
+              disabled={isDeleting}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              {isDeleting ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  Excluindo...
+                </>
+              ) : (
+                'Excluir Empresa'
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

@@ -71,4 +71,20 @@ class Branch(BranchBase):
         from_attributes = True
 
 class CompanyWithBranches(Company):
-    branches: List[Branch] = [] 
+    branches: List[Branch] = []
+
+class CompanyProfile(BaseModel):
+    id: str
+    name: str
+    corporate_name: str
+    cnpj: str
+    email: str
+    phone: Optional[str] = None
+    address: Optional[str] = None
+    city: Optional[str] = None
+    state: Optional[str] = None
+    zip_code: Optional[str] = None
+    status: str
+    plan_type: str
+    created_at: str
+    updated_at: Optional[str] = None 

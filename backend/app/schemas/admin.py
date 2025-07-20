@@ -45,7 +45,10 @@ class PlanList(BaseModel):
     billing_cycle: str
     max_users: int
     max_branches: int
+    max_invoices: Optional[int] = 0
+    marketplace_sync_limit: Optional[int] = 0
     active_companies: int
+    modules: Optional[List[str]] = []
 
 class PlanDetail(BaseModel):
     id: str

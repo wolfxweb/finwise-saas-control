@@ -7,7 +7,7 @@ from uuid import uuid4
 from pydantic import BaseModel
 
 from ...core.database import get_db
-from ...core.security import verify_token
+from ...core.security import verify_token, create_access_token
 from ...services.auth_service import AuthService
 from ...services.company_service import CompanyService
 from ...schemas.user import UserCreate, UserLogin, UserLoginResponse, User as UserSchema
@@ -200,11 +200,28 @@ def register_company(
         
         db.commit()
         
+        # Gerar token de acesso para o usuário recém-criado
+        permissions = auth_service.get_user_permissions(user.id)
+        modules = auth_service.get_user_modules(user.id)
+        
+        access_token = create_access_token(
+            subject=user.id,
+            company_id=str(user.company_id),
+            branch_id=str(user.branch_id) if user.branch_id else None,
+            permissions=permissions,
+            modules=modules
+        )
+        
         return {
             "message": "Empresa registrada com sucesso",
             "company_id": str(company.id),
             "user_id": str(user.id),
-            "trial_end_date": trial_end_date.isoformat()
+            "trial_end_date": trial_end_date.isoformat(),
+            "access_token": access_token,
+            "token_type": "bearer",
+            "user": user,
+            "permissions": permissions,
+            "modules": modules
         }
         
     except Exception as e:

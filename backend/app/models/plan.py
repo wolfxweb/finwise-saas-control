@@ -15,6 +15,8 @@ class Plan(Base):
     billing_cycle = Column(String(20), default="monthly")
     max_users = Column(Integer, default=1)
     max_branches = Column(Integer, default=1)
+    max_invoices = Column(Integer, default=0)  # Quantidade de notas fiscais
+    marketplace_sync_limit = Column(Integer, default=0)  # Quantidade de sincronizações com marketplace
     status = Column(String(20), default="active")
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())

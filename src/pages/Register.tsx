@@ -170,18 +170,35 @@ const Register = () => {
         
         console.log('Resposta do registro:', response);
 
-        // Fazer login automático após registro bem-sucedido
-        const loginSuccess = await login(formData.userEmail, formData.password);
-        
-        if (loginSuccess) {
-          // Mostrar mensagem de sucesso
-          alert('Empresa registrada com sucesso! Você receberá um email de confirmação. Redirecionando para o dashboard...');
+        // Verificar se a resposta contém token de acesso
+        if (response.access_token) {
+          // Salvar token e dados do usuário
+          localStorage.setItem('auth_token', response.access_token);
           
-          // Redirecionar para o dashboard
-          navigate('/app/dashboard');
+          // Atualizar o contexto de autenticação
+          const loginSuccess = await login(formData.userEmail, formData.password);
+          
+          if (loginSuccess) {
+            // Mostrar mensagem de sucesso
+            alert('Empresa registrada com sucesso! Redirecionando para o dashboard...');
+            
+            // Redirecionar para o dashboard
+            navigate('/app/dashboard');
+          } else {
+            alert('Empresa registrada, mas houve um problema no login automático. Faça login manualmente.');
+            navigate('/login');
+          }
         } else {
-          alert('Empresa registrada, mas houve um problema no login automático. Faça login manualmente.');
-          navigate('/login');
+          // Fallback: tentar login normal
+          const loginSuccess = await login(formData.userEmail, formData.password);
+          
+          if (loginSuccess) {
+            alert('Empresa registrada com sucesso! Redirecionando para o dashboard...');
+            navigate('/app/dashboard');
+          } else {
+            alert('Empresa registrada, mas houve um problema no login automático. Faça login manualmente.');
+            navigate('/login');
+          }
         }
       } catch (error: any) {
         console.error('Erro ao registrar empresa:', error);

@@ -176,6 +176,12 @@ export const adminAPI = {
     return response.data;
   },
 
+  updateCompanyPlan: async (companyId: string, planType: string) => {
+    const encodedPlanType = encodeURIComponent(planType);
+    const response = await api.put(`/api/v1/admin/companies/${companyId}/plan?plan_type=${encodedPlanType}`);
+    return response.data;
+  },
+
   subscribeCompanyToModule: async (companyId: string, moduleId: string) => {
     const response = await api.post(`/api/v1/admin/companies/${companyId}/modules/${moduleId}/subscribe`);
     return response.data;
@@ -183,6 +189,73 @@ export const adminAPI = {
 
   unsubscribeCompanyFromModule: async (companyId: string, moduleId: string) => {
     const response = await api.post(`/api/v1/admin/companies/${companyId}/modules/${moduleId}/unsubscribe`);
+    return response.data;
+  },
+
+  deleteCompany: async (companyId: string) => {
+    const response = await api.delete(`/api/v1/admin/companies/${companyId}`);
+    return response.data;
+  },
+
+  inactivateAllUsers: async (companyId: string) => {
+    const response = await api.put(`/api/v1/admin/companies/${companyId}/users/inactivate-all`);
+    return response.data;
+  },
+
+  getUsers: async () => {
+    const response = await api.get('/api/v1/admin/users');
+    return response.data;
+  },
+
+  createPlan: async (data: {
+    name: string;
+    description: string;
+    price: number;
+    billing_cycle: string;
+    max_users: number;
+    max_branches: number;
+    max_invoices?: number;
+    marketplace_sync_limit?: number;
+  }) => {
+    const response = await api.post('/api/v1/admin/plans', data);
+    return response.data;
+  },
+
+  updatePlan: async (planId: string, data: {
+    name?: string;
+    description?: string;
+    price?: number;
+    billing_cycle?: string;
+    max_users?: number;
+    max_branches?: number;
+    max_invoices?: number;
+    marketplace_sync_limit?: number;
+  }) => {
+    const response = await api.put(`/api/v1/admin/plans/${planId}`, data);
+    return response.data;
+  },
+
+  deletePlan: async (planId: string) => {
+    const response = await api.delete(`/api/v1/admin/plans/${planId}`);
+    return response.data;
+  },
+
+  // Funções para gerenciar módulos dos planos
+  getPlanModules: async (planId: string) => {
+    const response = await api.get(`/api/v1/admin/plans/${planId}/modules`);
+    return response.data;
+  },
+
+  addModuleToPlan: async (planId: string, moduleId: string) => {
+    const response = await api.post(`/api/v1/admin/plans/${planId}/modules`, {
+      module_id: moduleId,
+      is_included: true
+    });
+    return response.data;
+  },
+
+  removeModuleFromPlan: async (planId: string, moduleId: string) => {
+    const response = await api.delete(`/api/v1/admin/plans/${planId}/modules/${moduleId}`);
     return response.data;
   }
 };

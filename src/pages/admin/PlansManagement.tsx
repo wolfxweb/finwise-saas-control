@@ -41,8 +41,19 @@ import {
   XCircle,
   Loader2,
   TrendingUp,
-  Star
+  Star,
+  Package
 } from 'lucide-react';
+import { adminAPI } from '@/services/api';
+
+interface Module {
+  id: string;
+  name: string;
+  code: string;
+  description: string;
+  price: number;
+  category: string;
+}
 
 interface Plan {
   id: string;
@@ -52,29 +63,34 @@ interface Plan {
   billing_cycle: string;
   max_users: number;
   max_branches: number;
-  features: string[];
-  is_popular?: boolean;
-  is_active: boolean;
+  max_invoices?: number;
+  marketplace_sync_limit?: number;
   active_companies: number;
-  total_revenue: number;
-  created_at: string;
+  modules?: string[]; // Códigos dos módulos
 }
 
 const PlansManagement = () => {
   const [plans, setPlans] = useState<Plan[]>([]);
+  const [modules, setModules] = useState<Module[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedPlan, setSelectedPlan] = useState<Plan | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
+  const [selectedModules, setSelectedModules] = useState<string[]>([]);
 
   useEffect(() => {
     loadPlans();
+    loadModules();
   }, []);
 
   const loadPlans = async () => {
     try {
       setIsLoading(true);
-      // Dados mockados para demonstração
+      const response = await adminAPI.getPlans();
+      setPlans(response);
+    } catch (error) {
+      console.error('Erro ao carregar planos:', error);
+      // Em caso de erro, usar dados mockados como fallback
       const mockPlans: Plan[] = [
         {
           id: '1',
@@ -84,91 +100,91 @@ const PlansManagement = () => {
           billing_cycle: 'monthly',
           max_users: 3,
           max_branches: 1,
-          features: [
-            'Fluxo de Caixa',
-            'Gestão de Estoque',
-            'Relatórios Básicos',
-            'Suporte por Email',
-            'Backup Automático'
-          ],
-          is_active: true,
-          active_companies: 15,
-          total_revenue: 1485.00,
-          created_at: '2024-01-01'
-        },
-        {
-          id: '2',
-          name: 'Profissional',
-          description: 'Plano completo para empresas em crescimento',
-          price: 199.00,
-          billing_cycle: 'monthly',
-          max_users: 10,
-          max_branches: 3,
-          features: [
-            'Todas as funcionalidades do Básico',
-            'Contas a Pagar e Receber',
-            'Centro de Custos',
-            'Marketplace Integration',
-            'Relatórios Avançados',
-            'Suporte Prioritário',
-            'API Access'
-          ],
-          is_popular: true,
-          is_active: true,
-          active_companies: 8,
-          total_revenue: 1592.00,
-          created_at: '2024-01-01'
-        },
-        {
-          id: '3',
-          name: 'Empresarial',
-          description: 'Solução completa para grandes empresas',
-          price: 399.00,
-          billing_cycle: 'monthly',
-          max_users: 50,
-          max_branches: 10,
-          features: [
-            'Todas as funcionalidades do Profissional',
-            'Módulos Ilimitados',
-            'Integração com ERPs',
-            'Relatórios Personalizados',
-            'Suporte 24/7',
-            'Treinamento Incluso',
-            'SLA Garantido',
-            'White Label'
-          ],
-          is_active: true,
-          active_companies: 3,
-          total_revenue: 1197.00,
-          created_at: '2024-01-01'
+          active_companies: 15
         }
       ];
-
       setPlans(mockPlans);
-    } catch (error) {
-      console.error('Erro ao carregar planos:', error);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleToggleActive = async (planId: string) => {
+  const loadModules = async () => {
     try {
-      setPlans(prev => prev.map(plan =>
-        plan.id === planId ? { ...plan, is_active: !plan.is_active } : plan
-      ));
+      const response = await adminAPI.getModules();
+      setModules(response);
     } catch (error) {
-      console.error('Erro ao alterar status do plano:', error);
+      console.error('Erro ao carregar módulos:', error);
     }
   };
 
-  const handleTogglePopular = async (planId: string) => {
+  const handleCreatePlan = async (data: {
+    name: string;
+    description: string;
+    price: number;
+    billing_cycle: string;
+    max_users: number;
+    max_branches: number;
+    max_invoices?: number;
+    marketplace_sync_limit?: number;
+  }, selectedModules: string[] = []) => {
     try {
-      setPlans(prev => prev.map(plan =>
-        plan.id === planId ? { ...plan, is_popular: !plan.is_popular } : plan
-      ));
-    } catch (error) {
-      console.error('Erro ao alterar popularidade do plano:', error);
+      const planData = {
+        ...data,
+        modules: selectedModules
+      };
+      const response = await adminAPI.createPlan(planData);
+      if (response) {
+        loadPlans();
+        setIsDialogOpen(false);
+        alert('Plano criado com sucesso!');
+      }
+    } catch (error: any) {
+      console.error('Erro ao criar plano:', error);
+      const errorMessage = error.response?.data?.detail || 'Erro ao criar plano';
+      alert(`Erro: ${errorMessage}`);
+    }
+  };
+
+  const handleUpdatePlan = async (planId: string, data: {
+    name?: string;
+    description?: string;
+    price?: number;
+    billing_cycle?: string;
+    max_users?: number;
+    max_branches?: number;
+    max_invoices?: number;
+    marketplace_sync_limit?: number;
+  }, selectedModules: string[] = []) => {
+    try {
+      const planData = {
+        ...data,
+        modules: selectedModules
+      };
+      const response = await adminAPI.updatePlan(planId, planData);
+      if (response) {
+        loadPlans();
+        setIsDialogOpen(false);
+        alert('Plano atualizado com sucesso!');
+      }
+    } catch (error: any) {
+      console.error('Erro ao atualizar plano:', error);
+      const errorMessage = error.response?.data?.detail || 'Erro ao atualizar plano';
+      alert(`Erro: ${errorMessage}`);
+    }
+  };
+
+  const handleDeletePlan = async (planId: string) => {
+    if (!confirm('Tem certeza que deseja excluir este plano?')) return;
+    
+    try {
+      await adminAPI.deletePlan(planId);
+      setPlans(prev => prev.filter(plan => plan.id !== planId));
+      alert('Plano excluído com sucesso!');
+    } catch (error: any) {
+      console.error('Erro ao excluir plano:', error);
+      const errorMessage = error.response?.data?.detail || 'Erro ao excluir plano';
+      alert(`Erro: ${errorMessage}`);
     }
   };
 
@@ -198,13 +214,24 @@ const PlansManagement = () => {
           <h1 className="text-3xl font-bold text-gray-900">Gestão de Planos</h1>
           <p className="text-gray-600">Gerencie os planos disponíveis no sistema</p>
         </div>
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogTrigger asChild>
-            <Button>
-              <Plus className="h-4 w-4 mr-2" />
-              Novo Plano
-            </Button>
-          </DialogTrigger>
+        <Button onClick={() => {
+          setSelectedPlan(null);
+          setIsEditMode(false);
+          setSelectedModules([]);
+          setIsDialogOpen(true);
+        }}>
+          <Plus className="h-4 w-4 mr-2" />
+          Novo Plano
+        </Button>
+        
+        <Dialog open={isDialogOpen} onOpenChange={(open) => {
+          setIsDialogOpen(open);
+          if (!open) {
+            setSelectedPlan(null);
+            setIsEditMode(false);
+            setSelectedModules([]);
+          }
+        }}>
           <DialogContent className="max-w-2xl">
             <DialogHeader>
               <DialogTitle>
@@ -214,16 +241,204 @@ const PlansManagement = () => {
                 {isEditMode ? 'Edite as informações do plano' : 'Crie um novo plano para o sistema'}
               </DialogDescription>
             </DialogHeader>
-            {/* TODO: Implementar formulário de plano */}
-            <div className="space-y-4">
-              <p className="text-gray-500">Formulário de plano será implementado aqui...</p>
-            </div>
+            <form onSubmit={async (e) => {
+              e.preventDefault();
+              const formData = new FormData(e.currentTarget);
+              const data = {
+                name: formData.get('name') as string,
+                description: formData.get('description') as string,
+                price: parseFloat(formData.get('price') as string),
+                billing_cycle: formData.get('billing_cycle') as string,
+                max_users: parseInt(formData.get('max_users') as string),
+                max_branches: parseInt(formData.get('max_branches') as string),
+                max_invoices: formData.get('max_invoices') ? parseInt(formData.get('max_invoices') as string) : undefined,
+                marketplace_sync_limit: formData.get('marketplace_sync_limit') ? parseInt(formData.get('marketplace_sync_limit') as string) : undefined,
+              };
+              
+              // Usar módulos do estado
+              const modulesToSend = [...selectedModules];
+              
+              if (isEditMode && selectedPlan) {
+                await handleUpdatePlan(selectedPlan.id, data, modulesToSend);
+              } else {
+                await handleCreatePlan(data, modulesToSend);
+              }
+            }} className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="name">Nome do Plano</Label>
+                  <Input
+                    id="name"
+                    name="name"
+                    defaultValue={selectedPlan?.name || ''}
+                    required
+                    placeholder="Ex: Básico, Profissional, Empresarial"
+                  />
+                </div>
+                
+                <div className="space-y-2">
+                  <Label htmlFor="price">Preço (R$)</Label>
+                  <Input
+                    id="price"
+                    name="price"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    defaultValue={selectedPlan?.price || ''}
+                    required
+                    placeholder="99.90"
+                  />
+                </div>
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="description">Descrição</Label>
+                <Textarea
+                  id="description"
+                  name="description"
+                  defaultValue={selectedPlan?.description || ''}
+                  required
+                  placeholder="Descreva as funcionalidades e benefícios do plano"
+                  rows={3}
+                />
+              </div>
+              
+              <div className="grid grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="billing_cycle">Ciclo de Cobrança</Label>
+                  <Select 
+                    name="billing_cycle" 
+                    defaultValue={selectedPlan?.billing_cycle || 'monthly'}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="monthly">Mensal</SelectItem>
+                      <SelectItem value="yearly">Anual</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                
+                <div className="space-y-2">
+                  <Label htmlFor="max_users">Máx. Usuários</Label>
+                  <Input
+                    id="max_users"
+                    name="max_users"
+                    type="number"
+                    min="1"
+                    defaultValue={selectedPlan?.max_users || ''}
+                    required
+                    placeholder="10"
+                  />
+                </div>
+                
+                <div className="space-y-2">
+                  <Label htmlFor="max_branches">Máx. Filiais</Label>
+                  <Input
+                    id="max_branches"
+                    name="max_branches"
+                    type="number"
+                    min="1"
+                    defaultValue={selectedPlan?.max_branches || ''}
+                    required
+                    placeholder="3"
+                  />
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="max_invoices">Máx. Notas Fiscais</Label>
+                  <Input
+                    id="max_invoices"
+                    name="max_invoices"
+                    type="number"
+                    min="0"
+                    defaultValue={selectedPlan?.max_invoices || ''}
+                    placeholder="1000 (0 = ilimitado)"
+                  />
+                </div>
+                
+                <div className="space-y-2">
+                  <Label htmlFor="marketplace_sync_limit">Sincronização com Marketplace</Label>
+                  <Input
+                    id="marketplace_sync_limit"
+                    name="marketplace_sync_limit"
+                    type="number"
+                    min="0"
+                    defaultValue={selectedPlan?.marketplace_sync_limit || ''}
+                    placeholder="1000 (0 = ilimitado)"
+                  />
+                </div>
+              </div>
+              
+              {/* Seção de Módulos */}
+              <div className="space-y-4">
+                <div className="flex items-center space-x-2">
+                  <Package className="h-4 w-4" />
+                  <Label className="text-base font-medium">Módulos Incluídos</Label>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-60 overflow-y-auto border rounded-lg p-4">
+                  {modules.map((module) => (
+                    <div key={module.id} className="flex items-center space-x-3 p-3 border rounded-lg hover:bg-gray-50">
+                      <input
+                        type="checkbox"
+                        id={`module-${module.id}`}
+                        name={`module-${module.id}`}
+                        className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                        checked={selectedModules.includes(module.code)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedModules(prev => [...prev, module.code]);
+                          } else {
+                            setSelectedModules(prev => prev.filter(code => code !== module.code));
+                          }
+                        }}
+                      />
+                      <div className="flex-1">
+                        <div className="flex items-center justify-between">
+                          <Label htmlFor={`module-${module.id}`} className="font-medium cursor-pointer">
+                            {module.name}
+                          </Label>
+                          <Badge variant="outline" className="text-xs">
+                            {formatCurrency(module.price)}
+                          </Badge>
+                        </div>
+                        <p className="text-sm text-gray-500 mt-1">{module.description}</p>
+                        <div className="flex items-center mt-1">
+                          <Badge variant="secondary" className="text-xs">
+                            {module.category}
+                          </Badge>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-sm text-gray-500">
+                  Selecione os módulos que estarão disponíveis neste plano
+                </p>
+              </div>
+              
+              <div className="flex justify-end space-x-2 pt-4">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setIsDialogOpen(false)}
+                >
+                  Cancelar
+                </Button>
+                <Button type="submit">
+                  {isEditMode ? 'Atualizar Plano' : 'Criar Plano'}
+                </Button>
+              </div>
+            </form>
           </DialogContent>
         </Dialog>
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total de Planos</CardTitle>
@@ -232,7 +447,7 @@ const PlansManagement = () => {
           <CardContent>
             <div className="text-2xl font-bold">{plans.length}</div>
             <p className="text-xs text-muted-foreground">
-              {plans.filter(p => p.is_active).length} ativos
+              Planos disponíveis no sistema
             </p>
           </CardContent>
         </Card>
@@ -247,7 +462,7 @@ const PlansManagement = () => {
               {plans.reduce((sum, plan) => sum + plan.active_companies, 0)}
             </div>
             <p className="text-xs text-muted-foreground">
-              Média de {Math.round(plans.reduce((sum, plan) => sum + plan.active_companies, 0) / plans.length)} por plano
+              Média de {Math.round(plans.reduce((sum, plan) => sum + plan.active_companies, 0) / Math.max(plans.length, 1))} por plano
             </p>
           </CardContent>
         </Card>
@@ -259,157 +474,21 @@ const PlansManagement = () => {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {formatCurrency(plans.reduce((sum, plan) => sum + plan.total_revenue, 0))}
+              {formatCurrency(plans.reduce((sum, plan) => sum + (plan.price * plan.active_companies), 0))}
             </div>
             <p className="text-xs text-muted-foreground">
-              Média de {formatCurrency(plans.reduce((sum, plan) => sum + plan.total_revenue, 0) / plans.length)} por plano
+              Receita total dos planos ativos
             </p>
           </CardContent>
         </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Plano Mais Popular</CardTitle>
-            <Star className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {plans.find(p => p.is_popular)?.name || 'Nenhum'}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              {plans.find(p => p.is_popular)?.active_companies || 0} empresas
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Plans Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {plans.map((plan) => (
-          <Card key={plan.id} className={`relative ${plan.is_popular ? 'ring-2 ring-blue-500' : ''}`}>
-            {plan.is_popular && (
-              <div className="absolute -top-3 left-1/2 transform -translate-x-1/2">
-                <Badge className="bg-blue-500 text-white">
-                  <Star className="h-3 w-3 mr-1" />
-                  Mais Popular
-                </Badge>
-              </div>
-            )}
-            
-            <CardHeader className="text-center pb-4">
-              <CardTitle className="text-2xl">{plan.name}</CardTitle>
-              <CardDescription>{plan.description}</CardDescription>
-              <div className="mt-4">
-                <span className="text-4xl font-bold">{formatCurrency(plan.price)}</span>
-                <span className="text-gray-500">/mês</span>
-              </div>
-            </CardHeader>
-            
-            <CardContent className="space-y-4">
-              {/* Features */}
-              <div className="space-y-2">
-                <h4 className="font-medium">Funcionalidades Inclusas:</h4>
-                <ul className="space-y-1">
-                  {plan.features.map((feature, index) => (
-                    <li key={index} className="flex items-center text-sm">
-                      <CheckCircle className="h-4 w-4 text-green-500 mr-2" />
-                      {feature}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-
-              {/* Limits */}
-              <div className="grid grid-cols-2 gap-4 pt-4 border-t">
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-blue-600">{plan.max_users}</div>
-                  <div className="text-xs text-gray-500">Usuários</div>
-                </div>
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-green-600">{plan.max_branches}</div>
-                  <div className="text-xs text-gray-500">Filiais</div>
-                </div>
-              </div>
-
-              {/* Stats */}
-              <div className="pt-4 border-t">
-                <div className="flex justify-between items-center text-sm">
-                  <span>Empresas Ativas:</span>
-                  <span className="font-medium">{plan.active_companies}</span>
-                </div>
-                <div className="flex justify-between items-center text-sm">
-                  <span>Receita Mensal:</span>
-                  <span className="font-medium">{formatCurrency(plan.total_revenue)}</span>
-                </div>
-              </div>
-
-              {/* Actions */}
-              <div className="flex items-center justify-between pt-4 border-t">
-                <div className="flex items-center space-x-2">
-                  <Button
-                    variant={plan.is_active ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => handleToggleActive(plan.id)}
-                  >
-                    {plan.is_active ? (
-                      <>
-                        <CheckCircle className="h-4 w-4 mr-1" />
-                        Ativo
-                      </>
-                    ) : (
-                      <>
-                        <XCircle className="h-4 w-4 mr-1" />
-                        Inativo
-                      </>
-                    )}
-                  </Button>
-                  
-                  <Button
-                    variant={plan.is_popular ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => handleTogglePopular(plan.id)}
-                  >
-                    <Star className="h-4 w-4 mr-1" />
-                    Popular
-                  </Button>
-                </div>
-
-                <div className="flex items-center space-x-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      setSelectedPlan(plan);
-                      setIsEditMode(true);
-                      setIsDialogOpen(true);
-                    }}
-                  >
-                    <Edit className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      setSelectedPlan(plan);
-                      setIsEditMode(false);
-                      setIsDialogOpen(true);
-                    }}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
       </div>
 
       {/* Plans Table */}
       <Card>
         <CardHeader>
-          <CardTitle>Detalhes dos Planos</CardTitle>
+          <CardTitle>Planos de Assinatura</CardTitle>
           <CardDescription>
-            Visão detalhada de todos os planos e suas métricas
+            Gerencie os planos disponíveis no sistema
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -418,11 +497,11 @@ const PlansManagement = () => {
               <TableHeader>
                 <TableRow>
                   <TableHead>Plano</TableHead>
+                  <TableHead>Descrição</TableHead>
                   <TableHead>Preço</TableHead>
+                  <TableHead>Ciclo de Cobrança</TableHead>
                   <TableHead>Limites</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Empresas</TableHead>
-                  <TableHead>Receita</TableHead>
+                  <TableHead>Empresas Ativas</TableHead>
                   <TableHead>Ações</TableHead>
                 </TableRow>
               </TableHeader>
@@ -430,19 +509,21 @@ const PlansManagement = () => {
                 {plans.map((plan) => (
                   <TableRow key={plan.id}>
                     <TableCell>
-                      <div>
-                        <div className="font-medium flex items-center">
-                          {plan.name}
-                          {plan.is_popular && (
-                            <Star className="h-4 w-4 text-blue-500 ml-2" />
-                          )}
-                        </div>
-                        <div className="text-sm text-gray-500">{plan.description}</div>
+                      <div className="font-medium">{plan.name}</div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="text-sm text-gray-500 max-w-xs truncate">
+                        {plan.description}
                       </div>
                     </TableCell>
                     <TableCell>
                       <div className="font-medium">{formatCurrency(plan.price)}</div>
-                      <div className="text-sm text-gray-500">por mês</div>
+                      <div className="text-sm text-gray-500">/mês</div>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline">
+                        {plan.billing_cycle === 'monthly' ? 'Mensal' : 'Anual'}
+                      </Badge>
                     </TableCell>
                     <TableCell>
                       <div className="space-y-1">
@@ -457,17 +538,10 @@ const PlansManagement = () => {
                       </div>
                     </TableCell>
                     <TableCell>
-                      <Badge variant={plan.is_active ? "default" : "secondary"}>
-                        {plan.is_active ? "Ativo" : "Inativo"}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <div className="font-medium">{plan.active_companies}</div>
-                      <div className="text-sm text-gray-500">empresas ativas</div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="font-medium">{formatCurrency(plan.total_revenue)}</div>
-                      <div className="text-sm text-gray-500">receita mensal</div>
+                      <div className="text-center">
+                        <div className="font-medium">{plan.active_companies}</div>
+                        <div className="text-sm text-gray-500">empresas</div>
+                      </div>
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center space-x-2">
@@ -477,6 +551,7 @@ const PlansManagement = () => {
                           onClick={() => {
                             setSelectedPlan(plan);
                             setIsEditMode(true);
+                            setSelectedModules(plan.modules || []);
                             setIsDialogOpen(true);
                           }}
                         >
@@ -485,11 +560,8 @@ const PlansManagement = () => {
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => {
-                            setSelectedPlan(plan);
-                            setIsEditMode(false);
-                            setIsDialogOpen(true);
-                          }}
+                          onClick={() => handleDeletePlan(plan.id)}
+                          className="text-red-600 hover:text-red-700 hover:bg-red-50"
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>
@@ -502,6 +574,8 @@ const PlansManagement = () => {
           </div>
         </CardContent>
       </Card>
+
+
     </div>
   );
 };
