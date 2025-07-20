@@ -97,6 +97,9 @@ const CompaniesManagement = () => {
   const [companyToDelete, setCompanyToDelete] = useState<Company | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isInactivatingUsers, setIsInactivatingUsers] = useState(false);
+  const [isReactivatingUsers, setIsReactivatingUsers] = useState(false);
+  const [inactivatingCompanyId, setInactivatingCompanyId] = useState<string | null>(null);
+  const [reactivatingCompanyId, setReactivatingCompanyId] = useState<string | null>(null);
 
   const [plans, setPlans] = useState<Plan[]>([]);
 
@@ -277,6 +280,7 @@ const CompaniesManagement = () => {
   const handleInactivateAllUsers = async (company: Company) => {
     try {
       setIsInactivatingUsers(true);
+      setInactivatingCompanyId(company.id);
       const result = await adminAPI.inactivateAllUsers(company.id);
       
       // Atualizar a lista de empresas para refletir a mudança
@@ -291,6 +295,27 @@ const CompaniesManagement = () => {
       alert(`Erro: ${errorMessage}`);
     } finally {
       setIsInactivatingUsers(false);
+      setInactivatingCompanyId(null);
+    }
+  };
+
+  const handleReactivateAllUsers = async (company: Company) => {
+    try {
+      setIsReactivatingUsers(true);
+      setReactivatingCompanyId(company.id);
+      const result = await adminAPI.reactivateAllUsers(company.id);
+      
+      // Recarregar a lista de empresas para obter o número atualizado de usuários
+      await loadCompanies();
+      
+      alert(result.message);
+    } catch (error: any) {
+      console.error('Erro ao reativar usuários:', error);
+      const errorMessage = error.response?.data?.detail || 'Erro ao reativar usuários';
+      alert(`Erro: ${errorMessage}`);
+    } finally {
+      setIsReactivatingUsers(false);
+      setReactivatingCompanyId(null);
     }
   };
 
@@ -337,10 +362,154 @@ const CompaniesManagement = () => {
                 {isEditMode ? 'Edite as informações da empresa' : 'Cadastre uma nova empresa no sistema'}
               </DialogDescription>
             </DialogHeader>
-            {/* TODO: Implementar formulário de empresa */}
-            <div className="space-y-4">
-              <p className="text-gray-500">Formulário de empresa será implementado aqui...</p>
-            </div>
+            <form onSubmit={async (e) => {
+              e.preventDefault();
+              const formData = new FormData(e.currentTarget);
+              const data = {
+                name: formData.get('name') as string,
+                corporate_name: formData.get('corporate_name') as string,
+                cnpj: formData.get('cnpj') as string,
+                email: formData.get('email') as string,
+                phone: formData.get('phone') as string,
+                address: formData.get('address') as string,
+                city: formData.get('city') as string,
+                state: formData.get('state') as string,
+                zip_code: formData.get('zip_code') as string,
+              };
+              
+              if (isEditMode && selectedCompany) {
+                try {
+                  await adminAPI.updateCompany(selectedCompany.id, data);
+                  alert('Empresa atualizada com sucesso!');
+                  loadCompanies();
+                  setIsDialogOpen(false);
+                  setSelectedCompany(null);
+                  setIsEditMode(false);
+                } catch (error: any) {
+                  console.error('Erro ao atualizar empresa:', error);
+                  const errorMessage = error.response?.data?.detail || 'Erro ao atualizar empresa';
+                  alert(`Erro: ${errorMessage}`);
+                }
+              }
+            }} className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="name">Nome Fantasia *</Label>
+                  <Input
+                    id="name"
+                    name="name"
+                    defaultValue={selectedCompany?.name || ''}
+                    required
+                    placeholder="Nome da empresa"
+                  />
+                </div>
+                
+                <div className="space-y-2">
+                  <Label htmlFor="corporate_name">Razão Social *</Label>
+                  <Input
+                    id="corporate_name"
+                    name="corporate_name"
+                    defaultValue={selectedCompany?.corporate_name || ''}
+                    required
+                    placeholder="Razão social completa"
+                  />
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="cnpj">CNPJ *</Label>
+                  <Input
+                    id="cnpj"
+                    name="cnpj"
+                    defaultValue={selectedCompany?.cnpj || ''}
+                    required
+                    placeholder="00.000.000/0000-00"
+                  />
+                </div>
+                
+                <div className="space-y-2">
+                  <Label htmlFor="email">Email *</Label>
+                  <Input
+                    id="email"
+                    name="email"
+                    type="email"
+                    defaultValue={selectedCompany?.email || ''}
+                    required
+                    placeholder="contato@empresa.com"
+                  />
+                </div>
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="phone">Telefone</Label>
+                <Input
+                  id="phone"
+                  name="phone"
+                  defaultValue={selectedCompany?.phone || ''}
+                  placeholder="(11) 99999-9999"
+                />
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="address">Endereço</Label>
+                <Input
+                  id="address"
+                  name="address"
+                  defaultValue={selectedCompany?.address || ''}
+                  placeholder="Rua, número, complemento"
+                />
+              </div>
+              
+              <div className="grid grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="city">Cidade</Label>
+                  <Input
+                    id="city"
+                    name="city"
+                    defaultValue={selectedCompany?.city || ''}
+                    placeholder="São Paulo"
+                  />
+                </div>
+                
+                <div className="space-y-2">
+                  <Label htmlFor="state">Estado</Label>
+                  <Input
+                    id="state"
+                    name="state"
+                    defaultValue={selectedCompany?.state || ''}
+                    placeholder="SP"
+                  />
+                </div>
+                
+                <div className="space-y-2">
+                  <Label htmlFor="zip_code">CEP</Label>
+                  <Input
+                    id="zip_code"
+                    name="zip_code"
+                    defaultValue={selectedCompany?.zip_code || ''}
+                    placeholder="01234-567"
+                  />
+                </div>
+              </div>
+              
+              <div className="flex justify-end space-x-2 pt-4">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setIsDialogOpen(false);
+                    setSelectedCompany(null);
+                    setIsEditMode(false);
+                  }}
+                >
+                  Cancelar
+                </Button>
+                <Button type="submit">
+                  {isEditMode ? 'Atualizar Empresa' : 'Criar Empresa'}
+                </Button>
+              </div>
+            </form>
           </DialogContent>
         </Dialog>
       </div>
@@ -616,7 +785,21 @@ const CompaniesManagement = () => {
                               className="text-orange-600 hover:text-orange-700 hover:bg-orange-50"
                               title="Inativar todos os usuários"
                             >
-                              {isInactivatingUsers ? (
+                              {isInactivatingUsers && inactivatingCompanyId === company.id ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <Users className="h-4 w-4" />
+                              )}
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleReactivateAllUsers(company)}
+                              disabled={isReactivatingUsers}
+                              className="text-green-600 hover:text-green-700 hover:bg-green-50"
+                              title="Reativar todos os usuários"
+                            >
+                              {isReactivatingUsers && reactivatingCompanyId === company.id ? (
                                 <Loader2 className="h-4 w-4 animate-spin" />
                               ) : (
                                 <Users className="h-4 w-4" />

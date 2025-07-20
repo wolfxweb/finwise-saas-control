@@ -60,16 +60,17 @@ const Register = () => {
 
   const plans = [
     {
-      id: 'basic',
+      id: 'Básico',
       name: 'Básico',
-      price: 99,
+      price: 99.9,
       period: '/mês',
       description: 'Ideal para pequenas empresas',
       features: [
-        '3 usuários incluídos',
+        '1 usuário incluído',
         '1 filial',
         'Fluxo de Caixa',
-        'Gestão de Estoque',
+        'Contas a Pagar e Receber',
+        'Centro de Custos',
         'Relatórios básicos',
         'Suporte por email',
         'Backup automático'
@@ -78,39 +79,39 @@ const Register = () => {
       trialDays: 30
     },
     {
-      id: 'professional',
+      id: 'Profissional',
       name: 'Profissional',
-      price: 199,
+      price: 500,
       period: '/mês',
       description: 'Perfeito para empresas em crescimento',
       features: [
         '10 usuários incluídos',
-        '3 filiais',
+        '1 filial',
         'Todos os módulos básicos',
         'Contas a Pagar e Receber',
         'Centro de Custos',
         'Relatórios avançados',
         'Suporte prioritário',
-        'API Access'
+        'Integração com marketplaces'
       ],
       popular: true,
       trialDays: 30
     },
     {
-      id: 'enterprise',
+      id: 'Empresarial',
       name: 'Empresarial',
-      price: 399,
+      price: 1000,
       period: '/mês',
       description: 'Para grandes empresas',
       features: [
-        '50 usuários incluídos',
-        '10 filiais',
+        '10 usuários incluídos',
+        '2 filiais',
         'Todos os módulos',
-        'Integração com ERPs',
-        'Relatórios personalizados',
-        'Suporte 24/7',
-        'Treinamento incluso',
-        'SLA Garantido'
+        'Gestão de Estoque',
+        'Produtos e Fornecedores',
+        'Compras e Expedição',
+        'Pedidos e Atendimento',
+        'Integração com ERPs'
       ],
       popular: false,
       trialDays: 30

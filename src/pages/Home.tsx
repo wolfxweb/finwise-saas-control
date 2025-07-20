@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -22,11 +22,67 @@ import {
   Store,
   Receipt,
   UserCheck,
-  Headphones
+  Headphones,
+  Loader2
 } from 'lucide-react';
+import { adminAPI } from '@/services/api';
 
 const Home = () => {
   const [isVideoOpen, setIsVideoOpen] = useState(false);
+  const [plans, setPlans] = useState<any[]>([]);
+  const [isLoadingPlans, setIsLoadingPlans] = useState(true);
+
+  useEffect(() => {
+    loadPlans();
+  }, []);
+
+  const loadPlans = async () => {
+    try {
+      const response = await adminAPI.getPublicPlans();
+      setPlans(response);
+    } catch (error) {
+      console.error('Erro ao carregar planos:', error);
+      // Em caso de erro, usar dados mockados como fallback
+      setPlans([
+        {
+          name: "Básico",
+          price: 99,
+          billing_cycle: "monthly",
+          description: "Ideal para pequenas empresas",
+          max_users: 3,
+          max_branches: 1,
+          modules: []
+        },
+        {
+          name: "Profissional",
+          price: 199,
+          billing_cycle: "monthly",
+          description: "Perfeito para empresas em crescimento",
+          max_users: 10,
+          max_branches: 3,
+          modules: []
+        },
+        {
+          name: "Empresarial",
+          price: 399,
+          billing_cycle: "monthly",
+          description: "Para grandes empresas",
+          max_users: 50,
+          max_branches: 10,
+          modules: []
+        }
+      ]);
+    } finally {
+      setIsLoadingPlans(false);
+    }
+  };
+
+  const formatCurrency = (value: number) => {
+    return new Intl.NumberFormat('pt-BR', {
+      style: 'currency',
+      currency: 'BRL'
+    }).format(value);
+  };
 
   const features = [
     {
@@ -67,52 +123,35 @@ const Home = () => {
     }
   ];
 
-  const plans = [
-    {
-      name: "Básico",
-      price: "R$ 99",
-      period: "/mês",
-      description: "Ideal para pequenas empresas",
-      features: [
-        "3 usuários",
-        "1 filial",
-        "2 módulos básicos",
-        "Suporte por email",
-        "Backup automático"
-      ],
-      popular: false
-    },
-    {
-      name: "Profissional",
-      price: "R$ 199",
-      period: "/mês",
-      description: "Perfeito para empresas em crescimento",
-      features: [
-        "10 usuários",
-        "3 filiais",
-        "Módulos flexíveis",
-        "Suporte prioritário",
-        "Relatórios avançados",
-        "Integração com marketplaces"
-      ],
-      popular: true
-    },
-    {
-      name: "Empresarial",
-      price: "R$ 399",
-      period: "/mês",
-      description: "Para grandes empresas",
-      features: [
-        "50 usuários",
-        "10 filiais",
-        "Todos os módulos",
-        "Suporte 24/7",
-        "API personalizada",
-        "Treinamento incluído"
-      ],
-      popular: false
+  const getPlanFeatures = (plan: any) => {
+    const features = [
+      `${plan.max_users} usuários`,
+      `${plan.max_branches} filiais`,
+    ];
+    
+    if (plan.max_invoices && plan.max_invoices > 0) {
+      features.push(`${plan.max_invoices.toLocaleString()} notas fiscais/mês`);
+    } else {
+      features.push("Notas fiscais ilimitadas");
     }
-  ];
+    
+    if (plan.marketplace_sync_limit && plan.marketplace_sync_limit > 0) {
+      features.push(`${plan.marketplace_sync_limit.toLocaleString()} sincronizações/mês`);
+    } else {
+      features.push("Sincronização ilimitada");
+    }
+    
+    if (plan.modules && plan.modules.length > 0) {
+      features.push(`${plan.modules.length} módulos incluídos`);
+    } else {
+      features.push("Módulos flexíveis");
+    }
+    
+    features.push("Suporte por email");
+    features.push("Backup automático");
+    
+    return features;
+  };
 
   const testimonials = [
     {
@@ -252,41 +291,48 @@ const Home = () => {
               Comece pequeno e escale conforme sua empresa cresce. Sem contratos longos.
             </p>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            {plans.map((plan, index) => (
-              <Card key={index} className={`relative ${plan.popular ? 'ring-2 ring-blue-500 shadow-xl' : ''}`}>
-                {plan.popular && (
-                  <Badge className="absolute -top-3 left-1/2 transform -translate-x-1/2 bg-blue-500">
-                    Mais Popular
-                  </Badge>
-                )}
-                <CardHeader className="text-center">
-                  <CardTitle className="text-2xl">{plan.name}</CardTitle>
-                  <div className="flex items-baseline justify-center">
-                    <span className="text-4xl font-bold">{plan.price}</span>
-                    <span className="text-gray-500 ml-1">{plan.period}</span>
-                  </div>
-                  <CardDescription>{plan.description}</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <ul className="space-y-3 mb-6">
-                    {plan.features.map((feature, featureIndex) => (
-                      <li key={featureIndex} className="flex items-center">
-                        <CheckCircle className="h-4 w-4 text-green-500 mr-2" />
-                        <span className="text-sm">{feature}</span>
-                      </li>
-                    ))}
-                  </ul>
-                  <Button 
-                    className={`w-full ${plan.popular ? 'bg-blue-600 hover:bg-blue-700' : ''}`}
-                    variant={plan.popular ? 'default' : 'outline'}
-                  >
-                    <a href="/register">Começar Agora</a>
-                  </Button>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+          {isLoadingPlans ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="h-8 w-8 animate-spin mr-2" />
+              <span>Carregando planos...</span>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+              {plans.map((plan, index) => (
+                <Card key={plan.id || index} className={`relative ${index === 1 ? 'ring-2 ring-blue-500 shadow-xl' : ''}`}>
+                  {index === 1 && (
+                    <Badge className="absolute -top-3 left-1/2 transform -translate-x-1/2 bg-blue-500">
+                      Mais Popular
+                    </Badge>
+                  )}
+                  <CardHeader className="text-center">
+                    <CardTitle className="text-2xl">{plan.name}</CardTitle>
+                    <div className="flex items-baseline justify-center">
+                      <span className="text-4xl font-bold">{formatCurrency(plan.price)}</span>
+                      <span className="text-gray-500 ml-1">/mês</span>
+                    </div>
+                    <CardDescription>{plan.description}</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <ul className="space-y-3 mb-6">
+                      {getPlanFeatures(plan).map((feature, featureIndex) => (
+                        <li key={featureIndex} className="flex items-center">
+                          <CheckCircle className="h-4 w-4 text-green-500 mr-2" />
+                          <span className="text-sm">{feature}</span>
+                        </li>
+                      ))}
+                    </ul>
+                    <Button 
+                      className={`w-full ${index === 1 ? 'bg-blue-600 hover:bg-blue-700' : ''}`}
+                      variant={index === 1 ? 'default' : 'outline'}
+                    >
+                      <a href="/register">Começar Agora</a>
+                    </Button>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
         </div>
       </section>
 

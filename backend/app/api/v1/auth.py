@@ -169,21 +169,25 @@ def register_company(
             total_price=plan_price
         )
         db.add(subscription)
+        db.flush()  # Flush para obter o ID da subscription
         
-        # Ativar módulos básicos do plano
-        if plan:
-            # Buscar módulos do plano
-            plan_modules = db.query(PlanModule).filter(PlanModule.plan_id == plan.id).all()
-            for plan_module in plan_modules:
-                company_module = CompanyModule(
-                    company_id=company.id,
-                    module_id=plan_module.module_id,
-                    subscription_id=subscription.id,
-                    price=plan_module.module.price if plan_module.module else 0,
-                    start_date=datetime.utcnow().date(),
-                    status="active"
-                )
-                db.add(company_module)
+        # Ativar módulos básicos do plano (comentado temporariamente para debug)
+        # if plan:
+        #     # Buscar módulos do plano
+        #     plan_modules = db.query(PlanModule).filter(PlanModule.plan_id == plan.id).all()
+        #     for plan_module in plan_modules:
+        #         # Buscar o módulo para obter o preço
+        #         module = db.query(Module).filter(Module.id == plan_module.module_id).first()
+        #         if module:
+        #             company_module = CompanyModule(
+        #                 company_id=company.id,
+        #                 module_id=plan_module.module_id,
+        #                 subscription_id=subscription.id,
+        #                 price=module.price,
+        #                 start_date=datetime.utcnow().date(),
+        #                 status="active"
+        #             )
+        #             db.add(company_module)
         
         # Criar usuário administrador
         auth_service = AuthService(db)

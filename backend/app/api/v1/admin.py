@@ -189,6 +189,47 @@ def get_plans(
     
     return result
 
+@router.get("/public/plans", response_model=List[PlanList])
+def get_public_plans(
+    db: Session = Depends(get_db)
+):
+    """Listar todos os planos (endpoint público para página de vendas)"""
+    plans = db.query(Plan).all()
+    result = []
+    
+    for plan in plans:
+        # Obter módulos do plano
+        plan_modules = db.query(PlanModule).filter(
+            PlanModule.plan_id == plan.id,
+            PlanModule.is_included == True
+        ).all()
+        
+        # Obter códigos dos módulos
+        module_codes = []
+        for plan_module in plan_modules:
+            module = db.query(Module).filter(Module.id == plan_module.module_id).first()
+            if module:
+                module_codes.append(module.code)
+        
+        result.append(PlanList(
+            id=str(plan.id),
+            name=plan.name,
+            description=plan.description,
+            price=plan.price,
+            billing_cycle=plan.billing_cycle,
+            max_users=plan.max_users,
+            max_branches=plan.max_branches,
+            max_invoices=plan.max_invoices,
+            marketplace_sync_limit=plan.marketplace_sync_limit,
+            active_companies=db.query(Company).filter(
+                Company.plan_type == plan.name,
+                Company.status == "active"
+            ).count(),
+            modules=module_codes
+        ))
+    
+    return result
+
 @router.get("/modules", response_model=List[ModuleList])
 def get_modules(
     db: Session = Depends(get_db),
@@ -372,6 +413,10 @@ def delete_plan(
             detail=f"Não é possível excluir o plano. {companies_using_plan} empresa(s) estão usando este plano."
         )
     
+    # Primeiro remover todos os módulos associados ao plano
+    db.query(PlanModule).filter(PlanModule.plan_id == plan_id).delete()
+    
+    # Depois excluir o plano
     db.delete(plan)
     db.commit()
     
@@ -430,6 +475,75 @@ def update_company_plan(
     db.commit()
     
     return {"message": f"Plano da empresa atualizado para {plan_type}"}
+
+@router.put("/companies/{company_id}")
+def update_company(
+    company_id: UUID,
+    data: dict = Body(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(verify_admin_access)
+):
+    """Atualizar dados de uma empresa"""
+    company = db.query(Company).filter(Company.id == company_id).first()
+    if not company:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Empresa não encontrada"
+        )
+    
+    # Extrair dados do payload
+    name = data.get("name")
+    corporate_name = data.get("corporate_name")
+    cnpj = data.get("cnpj")
+    email = data.get("email")
+    phone = data.get("phone")
+    address = data.get("address")
+    city = data.get("city")
+    state = data.get("state")
+    zip_code = data.get("zip_code")
+    
+    # Verificar se o email já existe (se estiver sendo alterado)
+    if email and email != company.email:
+        existing_company = db.query(Company).filter(Company.email == email).first()
+        if existing_company:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Já existe uma empresa com este email"
+            )
+    
+    # Verificar se o CNPJ já existe (se estiver sendo alterado)
+    if cnpj and cnpj != company.cnpj:
+        existing_company = db.query(Company).filter(Company.cnpj == cnpj).first()
+        if existing_company:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Já existe uma empresa com este CNPJ"
+            )
+    
+    # Atualizar campos fornecidos
+    if name is not None:
+        company.name = name
+    if corporate_name is not None:
+        company.corporate_name = corporate_name
+    if cnpj is not None:
+        company.cnpj = cnpj
+    if email is not None:
+        company.email = email
+    if phone is not None:
+        company.phone = phone
+    if address is not None:
+        company.address = address
+    if city is not None:
+        company.city = city
+    if state is not None:
+        company.state = state
+    if zip_code is not None:
+        company.zip_code = zip_code
+    
+    db.commit()
+    db.refresh(company)
+    
+    return {"message": "Empresa atualizada com sucesso"}
 
 @router.post("/companies/{company_id}/modules/{module_id}/subscribe")
 def subscribe_company_to_module(
@@ -583,6 +697,37 @@ def inactivate_all_users(
     db.commit()
     
     return {"message": f"{users_updated} usuário(s) inativado(s) com sucesso"}
+
+@router.put("/companies/{company_id}/users/reactivate-all")
+def reactivate_all_users(
+    company_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(verify_admin_access)
+):
+    """Reativar todos os usuários de uma empresa"""
+    company = db.query(Company).filter(Company.id == company_id).first()
+    if not company:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Empresa não encontrada"
+        )
+    
+    # Verificar se é a empresa master (não permitir reativação)
+    if company.cnpj == "00.000.000/0001-00":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Não é possível reativar usuários da empresa master do sistema"
+        )
+    
+    # Reativar todos os usuários da empresa
+    users_updated = db.query(User).filter(
+        User.company_id == company_id,
+        User.status == "inactive"
+    ).update({"status": "active"})
+    
+    db.commit()
+    
+    return {"message": f"{users_updated} usuário(s) reativado(s) com sucesso"}
 
 @router.delete("/companies/{company_id}")
 def delete_company(

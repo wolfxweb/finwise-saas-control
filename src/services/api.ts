@@ -166,6 +166,11 @@ export const adminAPI = {
     return response.data;
   },
 
+  getPublicPlans: async () => {
+    const response = await api.get('/api/v1/admin/public/plans');
+    return response.data;
+  },
+
   getModules: async () => {
     const response = await api.get('/api/v1/admin/modules');
     return response.data;
@@ -179,6 +184,11 @@ export const adminAPI = {
   updateCompanyPlan: async (companyId: string, planType: string) => {
     const encodedPlanType = encodeURIComponent(planType);
     const response = await api.put(`/api/v1/admin/companies/${companyId}/plan?plan_type=${encodedPlanType}`);
+    return response.data;
+  },
+
+  updateCompany: async (companyId: string, data: any) => {
+    const response = await api.put(`/api/v1/admin/companies/${companyId}`, data);
     return response.data;
   },
 
@@ -199,6 +209,11 @@ export const adminAPI = {
 
   inactivateAllUsers: async (companyId: string) => {
     const response = await api.put(`/api/v1/admin/companies/${companyId}/users/inactivate-all`);
+    return response.data;
+  },
+
+  reactivateAllUsers: async (companyId: string) => {
+    const response = await api.put(`/api/v1/admin/companies/${companyId}/users/reactivate-all`);
     return response.data;
   },
 
