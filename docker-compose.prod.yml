@@ -1,4 +1,4 @@
-# Docker Compose para FinanceMax SaaS
+# Docker Compose para FinanceMax SaaS - PRODUÇÃO
 
 services:
   # Banco de dados PostgreSQL
@@ -15,6 +15,12 @@ services:
       - postgres_data:/var/lib/postgresql/data
     networks:
       - finwise_network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U finwise_user -d finwise_saas_db"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
   # Redis para cache e sessões
   redis:
@@ -27,6 +33,11 @@ services:
     networks:
       - finwise_network
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
   # Backend FastAPI
   backend:
@@ -37,20 +48,33 @@ services:
     environment:
       DATABASE_URL: postgresql://finwise_user:finwise_password@postgres:5432/finwise_saas_db
       REDIS_URL: redis://redis:6379
-      SECRET_KEY: your-super-secret-key-for-saas-multiempresa
+      SECRET_KEY: ${SECRET_KEY:-your-super-secret-key-for-saas-multiempresa}
       ALGORITHM: HS256
       ACCESS_TOKEN_EXPIRE_MINUTES: 30
-      BACKEND_CORS_ORIGINS: http://localhost:8080,http://localhost:3000,http://localhost:5173
+      BACKEND_CORS_ORIGINS: ${BACKEND_CORS_ORIGINS:-http://localhost:8080,http://localhost:3000,http://localhost:5173}
     ports:
       - "8000:8000"
     depends_on:
-      - postgres
-      - redis
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     volumes:
       - ./backend:/app
     networks:
       - finwise_network
     restart: unless-stopped
+    command: >
+      sh -c "
+        echo 'Aguardando banco de dados...' &&
+        while ! pg_isready -h postgres -p 5432 -U finwise_user; do
+          sleep 2
+        done &&
+        echo 'Executando migrations...' &&
+        alembic upgrade head &&
+        echo 'Iniciando aplicação...' &&
+        python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+      "
 
   # Frontend React
   frontend:
@@ -58,19 +82,38 @@ services:
       context: .
       dockerfile: Dockerfile.frontend
       args:
-        VITE_API_URL: http://localhost:8000
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:8000}
     container_name: finwise_frontend
     ports:
       - "8080:8080"
     depends_on:
       - backend
     environment:
-      VITE_API_URL: http://localhost:8000
+      VITE_API_URL: ${VITE_API_URL:-http://localhost:8000}
     networks:
       - finwise_network
     restart: unless-stopped
 
-  # Nginx (opcional - para produção)
+  # pgAdmin para gerenciar o banco de dados (opcional em produção)
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: finwise_pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@finwise.com}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-admin123}
+      PGADMIN_CONFIG_SERVER_MODE: 'False'
+    ports:
+      - "5050:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - finwise_network
+    restart: unless-stopped
+
+  # Nginx para produção
   nginx:
     image: nginx:alpine
     container_name: finwise_nginx
@@ -86,28 +129,13 @@ services:
       - finwise_network
     restart: unless-stopped
 
-  # pgAdmin para gerenciar o banco de dados
-  pgadmin:
-    image: dpage/pgadmin4:latest
-    container_name: finwise_pgadmin
-    environment:
-      PGADMIN_DEFAULT_EMAIL: admin@finwise.com
-      PGADMIN_DEFAULT_PASSWORD: admin123
-      PGADMIN_CONFIG_SERVER_MODE: 'False'
-    ports:
-      - "5050:80"
-    volumes:
-      - pgadmin_data:/var/lib/pgadmin
-    depends_on:
-      - postgres
-    networks:
-      - finwise_network
-    restart: unless-stopped
-
 volumes:
   postgres_data:
+    driver: local
   redis_data:
+    driver: local
   pgadmin_data:
+    driver: local
 
 networks:
   finwise_network:

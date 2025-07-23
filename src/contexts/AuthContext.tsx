@@ -77,9 +77,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const login = async (email: string, password: string): Promise<boolean> => {
     try {
+      console.log('🔍 Iniciando login para:', email);
       setIsLoading(true);
       
       const response = await authAPI.login(email, password);
+      console.log('📦 Resposta do login:', response);
 
       // Verificar se a resposta tem a estrutura esperada
       if (!response || typeof response !== 'object') {
@@ -88,6 +90,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       }
 
       const { access_token, user: userData, permissions, modules } = response;
+      console.log('✅ Token obtido:', !!access_token);
+      console.log('✅ User data:', userData);
 
       // Verificar se userData existe
       if (!userData) {
@@ -144,9 +148,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         setCompany(null);
       }
 
+      console.log('✅ Login concluído com sucesso');
       return true;
     } catch (error) {
-      console.error('Erro no login:', error);
+      console.error('❌ Erro no login:', error);
       return false;
     } finally {
       setIsLoading(false);

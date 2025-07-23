@@ -1,6 +1,7 @@
 from pydantic import BaseModel, EmailStr, validator
 from typing import Optional
 from datetime import datetime
+from uuid import UUID
 
 class SupplierBase(BaseModel):
     name: str
@@ -72,8 +73,8 @@ class SupplierUpdate(BaseModel):
     notes: Optional[str] = None
 
 class SupplierInDB(SupplierBase):
-    id: str
-    company_id: str
+    id: UUID
+    company_id: UUID
     created_at: datetime
     updated_at: Optional[datetime] = None
     is_active: bool

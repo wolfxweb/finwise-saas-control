@@ -194,8 +194,17 @@ export function Sidebar({ className }: SidebarProps) {
   };
 
   const renderMenuItem = (item: MenuItem) => {
-    // Verificar se o usuário tem acesso ao módulo
-    if (!hasModuleAccess(item.module) || !hasPermission(item.permission)) {
+    // Debug: log para verificar se o menu está sendo processado
+    console.log(`Processando menu: ${item.title}`, { 
+      hasModuleAccess: hasModuleAccess(item.module), 
+      hasPermission: hasPermission(item.permission),
+      module: item.module,
+      permission: item.permission
+    });
+    
+    // Verificar se o usuário tem acesso ao módulo (exceto para "Meu Plano")
+    if (item.title !== "Meu Plano" && (!hasModuleAccess(item.module) || !hasPermission(item.permission))) {
+      console.log(`Menu ${item.title} foi filtrado`);
       return null;
     }
 

@@ -16,6 +16,15 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
 }) => {
   const { user, company, isAuthenticated, isLoading } = useAuth();
   const location = useLocation();
+  
+  console.log('🔍 ProtectedRoute - Status:', {
+    isLoading,
+    isAuthenticated,
+    user: !!user,
+    company: !!company,
+    requiredModules,
+    requiredPermissions
+  });
 
   // Mostrar loading enquanto verifica autenticação
   if (isLoading) {

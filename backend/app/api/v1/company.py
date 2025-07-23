@@ -9,6 +9,7 @@ from ...services.auth_service import AuthService
 from ...models.user import User
 from ...models.company import Company
 from ...schemas.company import CompanyProfile
+from ...services.company_service import CompanyService
 
 router = APIRouter()
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
@@ -52,6 +53,10 @@ def get_company_profile(
             detail="Empresa não encontrada"
         )
     
+    # Obter módulos da empresa
+    company_service = CompanyService(db)
+    modules = company_service.get_company_modules(str(company.id))
+    
     return CompanyProfile(
         id=str(company.id),
         name=company.name,
@@ -65,6 +70,7 @@ def get_company_profile(
         zip_code=company.zip_code,
         status=company.status,
         plan_type=company.plan_type,
+        modules=modules,
         created_at=company.created_at.isoformat(),
         updated_at=company.updated_at.isoformat() if company.updated_at else None
     ) 

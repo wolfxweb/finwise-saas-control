@@ -52,7 +52,7 @@ class Supplier(Base):
     is_active = Column(Boolean, default=True)
     
     # Relacionamentos
-    company = relationship("Company")
+    # company = relationship("Company", foreign_keys=[company_id])
     
     def __repr__(self):
         return f"<Supplier(id={self.id}, name='{self.name}', company_id='{self.company_id}')>" 

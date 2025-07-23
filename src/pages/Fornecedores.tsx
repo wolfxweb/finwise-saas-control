@@ -26,6 +26,7 @@ interface Supplier {
   address?: string;
   city?: string;
   state?: string;
+  country?: string;
   category?: string;
   status: string;
   rating: number;
@@ -52,8 +53,8 @@ export default function Fornecedores() {
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingStats, setIsLoadingStats] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
-  const [statusFilter, setStatusFilter] = useState<string>("");
-  const [categoryFilter, setCategoryFilter] = useState<string>("");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
   const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(null);
@@ -73,8 +74,8 @@ export default function Fornecedores() {
       };
 
       if (searchTerm) params.search = searchTerm;
-      if (statusFilter) params.status = statusFilter;
-      if (categoryFilter) params.category = categoryFilter;
+      if (statusFilter && statusFilter !== 'all') params.status = statusFilter;
+      if (categoryFilter && categoryFilter !== 'all') params.category = categoryFilter;
 
       const response = await supplierAPI.getSuppliers(params);
       setSuppliers(response.suppliers || []);
@@ -117,6 +118,7 @@ export default function Fornecedores() {
         address: formData.get('address') as string,
         city: formData.get('city') as string,
         state: formData.get('state') as string,
+        country: formData.get('country') as string,
         category: formData.get('category') as string,
         payment_terms: formData.get('payment_terms') as string,
         credit_limit: parseFloat(formData.get('credit_limit') as string) || 0,
@@ -160,6 +162,7 @@ export default function Fornecedores() {
         address: formData.get('address') as string,
         city: formData.get('city') as string,
         state: formData.get('state') as string,
+        country: formData.get('country') as string,
         category: formData.get('category') as string,
         payment_terms: formData.get('payment_terms') as string,
         credit_limit: parseFloat(formData.get('credit_limit') as string) || 0,
@@ -261,14 +264,16 @@ export default function Fornecedores() {
             Gestão de fornecedores da empresa {company?.name}
           </p>
         </div>
+        <Button 
+          className="bg-gradient-primary text-primary-foreground" 
+          onClick={openCreateDialog}
+        >
+          <Plus className="mr-2 h-4 w-4" />
+          Novo Fornecedor
+        </Button>
+        
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogTrigger asChild>
-            <Button className="bg-gradient-primary text-primary-foreground" onClick={openCreateDialog}>
-              <Plus className="mr-2 h-4 w-4" />
-              Novo Fornecedor
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto" style={{ zIndex: 9999 }}>
             <DialogHeader>
               <DialogTitle>
                 {isEditMode ? 'Editar Fornecedor' : 'Novo Fornecedor'}
@@ -408,13 +413,20 @@ export default function Fornecedores() {
                 </div>
                 
                 <div className="space-y-2">
-                  <Label htmlFor="category">Categoria</Label>
-                  <Input
-                    id="category"
-                    name="category"
-                    defaultValue={selectedSupplier?.category || ''}
-                    placeholder="Tecnologia, Papelaria, etc."
-                  />
+                  <Label htmlFor="country">País</Label>
+                  <Select
+                    name="country"
+                    defaultValue={selectedSupplier?.country || 'Brasil'}
+                  >
+                    <SelectTrigger id="country">
+                      <SelectValue placeholder="Selecione o país" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Brasil">Brasil</SelectItem>
+                      <SelectItem value="China">China</SelectItem>
+                      <SelectItem value="Paraguai">Paraguai</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
 
@@ -545,7 +557,7 @@ export default function Fornecedores() {
                 <SelectValue placeholder="Status" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">Todos</SelectItem>
+                <SelectItem value="all">Todos</SelectItem>
                 <SelectItem value="ativo">Ativo</SelectItem>
                 <SelectItem value="inativo">Inativo</SelectItem>
                 <SelectItem value="bloqueado">Bloqueado</SelectItem>
@@ -556,7 +568,7 @@ export default function Fornecedores() {
                 <SelectValue placeholder="Categoria" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">Todas</SelectItem>
+                <SelectItem value="all">Todas</SelectItem>
                 <SelectItem value="Tecnologia">Tecnologia</SelectItem>
                 <SelectItem value="Papelaria">Papelaria</SelectItem>
                 <SelectItem value="Eletrônicos">Eletrônicos</SelectItem>

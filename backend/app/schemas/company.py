@@ -86,5 +86,6 @@ class CompanyProfile(BaseModel):
     zip_code: Optional[str] = None
     status: str
     plan_type: str
+    modules: Optional[List[str]] = []
     created_at: str
     updated_at: Optional[str] = None 

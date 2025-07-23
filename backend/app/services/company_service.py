@@ -114,14 +114,16 @@ class CompanyService:
         self.db.refresh(company_module)
         return company_module
 
-    def get_company_modules(self, company_id: UUID) -> List[CompanyModule]:
-        """Obter módulos da empresa"""
-        return self.db.query(CompanyModule).filter(
+    def get_company_modules(self, company_id: UUID) -> List[str]:
+        """Obter slugs dos módulos da empresa"""
+        company_modules = self.db.query(CompanyModule).join(Module).filter(
             and_(
                 CompanyModule.company_id == company_id,
                 CompanyModule.status == "active"
             )
         ).all()
+        
+        return [cm.module.code for cm in company_modules if cm.module]
 
     def remove_module_from_company(self, company_id: UUID, module_id: UUID) -> bool:
         """Remover módulo da empresa"""
