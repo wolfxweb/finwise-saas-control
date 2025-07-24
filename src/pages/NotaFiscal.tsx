@@ -40,6 +40,16 @@ export default function NotaFiscal() {
   const [sortField, setSortField] = useState<string>('data_emissao');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
 
+  // Estados para estatísticas dos cards
+  const [stats, setStats] = useState({
+    nfsEsteMes: 0,
+    nfsMesAnterior: 0,
+    valorTotal: 0,
+    valorMesAnterior: 0,
+    pendentes: 0,
+    emitidas: 0
+  });
+
   // Carregar notas fiscais
   useEffect(() => {
     loadNotasFiscais();
@@ -50,12 +60,53 @@ export default function NotaFiscal() {
       setLoading(true);
       const response = await notaFiscalAPI.getNotasFiscais();
       setNotasFiscais(response);
+      calculateStats(response);
     } catch (error) {
       console.error("Erro ao carregar notas fiscais:", error);
       toast.error("Erro ao carregar notas fiscais");
     } finally {
       setLoading(false);
     }
+  };
+
+  // Função para calcular estatísticas dos cards
+  const calculateStats = (notas: any[]) => {
+    const now = new Date();
+    const currentMonth = now.getMonth();
+    const currentYear = now.getFullYear();
+    
+    // Mês anterior
+    const lastMonth = currentMonth === 0 ? 11 : currentMonth - 1;
+    const lastYear = currentMonth === 0 ? currentYear - 1 : currentYear;
+
+    // Filtrar notas do mês atual
+    const notasEsteMes = notas.filter(nota => {
+      const dataNota = new Date(nota.data_emissao);
+      return dataNota.getMonth() === currentMonth && dataNota.getFullYear() === currentYear;
+    });
+
+    // Filtrar notas do mês anterior
+    const notasMesAnterior = notas.filter(nota => {
+      const dataNota = new Date(nota.data_emissao);
+      return dataNota.getMonth() === lastMonth && dataNota.getFullYear() === lastYear;
+    });
+
+    // Calcular valores
+    const valorTotal = notasEsteMes.reduce((sum, nota) => sum + parseFloat(nota.valor_total || 0), 0);
+    const valorMesAnterior = notasMesAnterior.reduce((sum, nota) => sum + parseFloat(nota.valor_total || 0), 0);
+    
+    // Contar por status
+    const pendentes = notasEsteMes.filter(nota => nota.status === 'pendente').length;
+    const emitidas = notasEsteMes.filter(nota => nota.status === 'emitida').length;
+
+    setStats({
+      nfsEsteMes: notasEsteMes.length,
+      nfsMesAnterior: notasMesAnterior.length,
+      valorTotal,
+      valorMesAnterior,
+      pendentes,
+      emitidas
+    });
   };
 
   const handleViewNotaFiscal = async (id: number) => {
@@ -533,6 +584,19 @@ export default function NotaFiscal() {
       : <ChevronDown className="h-4 w-4 text-blue-600" />;
   };
 
+  // Função para calcular variação percentual
+  const calculateVariation = (current: number, previous: number) => {
+    if (previous === 0) return current > 0 ? 100 : 0;
+    return ((current - previous) / previous) * 100;
+  };
+
+  // Função para formatar variação
+  const formatVariation = (variation: number) => {
+    const sign = variation >= 0 ? '+' : '';
+    const color = variation >= 0 ? 'text-green-600' : 'text-red-600';
+    return { text: `${sign}${variation.toFixed(1)}%`, color };
+  };
+
   return (
     <div className="flex-1 space-y-6 p-6">
       {/* Header */}
@@ -613,8 +677,18 @@ export default function NotaFiscal() {
             <Receipt className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">156</div>
-            <p className="text-xs text-muted-foreground">+23 vs mês anterior</p>
+            <div className="text-2xl font-bold">{stats.nfsEsteMes}</div>
+            {stats.nfsMesAnterior > 0 && (
+              <p className={`text-xs ${formatVariation(calculateVariation(stats.nfsEsteMes, stats.nfsMesAnterior)).color}`}>
+                {formatVariation(calculateVariation(stats.nfsEsteMes, stats.nfsMesAnterior)).text} vs mês anterior
+              </p>
+            )}
+            {stats.nfsMesAnterior === 0 && stats.nfsEsteMes > 0 && (
+              <p className="text-xs text-green-600">+100% vs mês anterior</p>
+            )}
+            {stats.nfsMesAnterior === 0 && stats.nfsEsteMes === 0 && (
+              <p className="text-xs text-muted-foreground">Nenhuma NF este mês</p>
+            )}
           </CardContent>
         </Card>
         <Card>
@@ -623,8 +697,20 @@ export default function NotaFiscal() {
             <FileText className="h-4 w-4 text-success" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-success">R$ 245.680</div>
-            <p className="text-xs text-muted-foreground">+18.5% vs mês anterior</p>
+            <div className="text-2xl font-bold text-success">
+              R$ {stats.valorTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </div>
+            {stats.valorMesAnterior > 0 && (
+              <p className={`text-xs ${formatVariation(calculateVariation(stats.valorTotal, stats.valorMesAnterior)).color}`}>
+                {formatVariation(calculateVariation(stats.valorTotal, stats.valorMesAnterior)).text} vs mês anterior
+              </p>
+            )}
+            {stats.valorMesAnterior === 0 && stats.valorTotal > 0 && (
+              <p className="text-xs text-green-600">+100% vs mês anterior</p>
+            )}
+            {stats.valorMesAnterior === 0 && stats.valorTotal === 0 && (
+              <p className="text-xs text-muted-foreground">Nenhum valor este mês</p>
+            )}
           </CardContent>
         </Card>
         <Card>
@@ -633,7 +719,7 @@ export default function NotaFiscal() {
             <Clock className="h-4 w-4 text-warning" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-warning">8</div>
+            <div className="text-2xl font-bold text-warning">{stats.pendentes}</div>
             <p className="text-xs text-muted-foreground">Aguardando emissão</p>
           </CardContent>
         </Card>
@@ -643,7 +729,7 @@ export default function NotaFiscal() {
             <CheckCircle className="h-4 w-4 text-primary" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-primary">148</div>
+            <div className="text-2xl font-bold text-primary">{stats.emitidas}</div>
             <p className="text-xs text-muted-foreground">Este mês</p>
           </CardContent>
         </Card>
