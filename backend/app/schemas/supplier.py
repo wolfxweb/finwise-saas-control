@@ -1,5 +1,5 @@
 from pydantic import BaseModel, EmailStr, validator
-from typing import Optional
+from typing import Optional, List
 from datetime import datetime
 from uuid import UUID
 
@@ -90,4 +90,42 @@ class SupplierListResponse(BaseModel):
     total: int
     page: int
     per_page: int
-    total_pages: int 
+    total_pages: int
+
+# Schemas para SupplierContact
+class SupplierContactBase(BaseModel):
+    name: str
+    email: Optional[EmailStr] = None
+    phone: Optional[str] = None
+    cellphone: Optional[str] = None
+    job_function: Optional[str] = None
+    is_primary: Optional[bool] = False
+
+class SupplierContactCreate(SupplierContactBase):
+    pass
+
+class SupplierContactUpdate(BaseModel):
+    name: Optional[str] = None
+    email: Optional[EmailStr] = None
+    phone: Optional[str] = None
+    cellphone: Optional[str] = None
+    job_function: Optional[str] = None
+    is_primary: Optional[bool] = None
+
+class SupplierContactInDB(SupplierContactBase):
+    id: UUID
+    supplier_id: UUID
+    company_id: UUID
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+    is_active: bool
+
+    class Config:
+        from_attributes = True
+
+class SupplierContactResponse(SupplierContactInDB):
+    pass
+
+# Schema atualizado para Supplier com contatos
+class SupplierWithContactsResponse(SupplierResponse):
+    contacts: List[SupplierContactResponse] = [] 

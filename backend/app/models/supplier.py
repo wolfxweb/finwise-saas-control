@@ -53,6 +53,35 @@ class Supplier(Base):
     
     # Relacionamentos
     # company = relationship("Company", foreign_keys=[company_id])
+    contacts = relationship("SupplierContact", back_populates="supplier", cascade="all, delete-orphan")
     
     def __repr__(self):
-        return f"<Supplier(id={self.id}, name='{self.name}', company_id='{self.company_id}')>" 
+        return f"<Supplier(id={self.id}, name='{self.name}', company_id='{self.company_id}')>"
+
+
+class SupplierContact(Base):
+    __tablename__ = "supplier_contacts"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    supplier_id = Column(UUID(as_uuid=True), ForeignKey("suppliers.id"), nullable=False)
+    company_id = Column(UUID(as_uuid=True), ForeignKey("companies.id"), nullable=False)
+    
+    # Informações do contato
+    name = Column(String(255), nullable=False)
+    email = Column(String(255))
+    phone = Column(String(20))
+    cellphone = Column(String(20))
+    job_function = Column(String(100))  # Cargo/função do contato
+    is_primary = Column(Boolean, default=False)  # Se é o contato principal
+    
+    # Metadados
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    is_active = Column(Boolean, default=True)
+    
+    # Relacionamentos
+    supplier = relationship("Supplier", back_populates="contacts")
+    # company = relationship("Company", foreign_keys=[company_id])
+    
+    def __repr__(self):
+        return f"<SupplierContact(id={self.id}, name='{self.name}', supplier_id='{self.supplier_id}', company_id='{self.company_id}')>" 

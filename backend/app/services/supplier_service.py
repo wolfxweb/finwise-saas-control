@@ -1,8 +1,8 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import and_, or_, func
 from typing import List, Optional
-from app.models.supplier import Supplier
-from app.schemas.supplier import SupplierCreate, SupplierUpdate
+from app.models.supplier import Supplier, SupplierContact
+from app.schemas.supplier import SupplierCreate, SupplierUpdate, SupplierContactCreate, SupplierContactUpdate
 # Removido import problemático
 import uuid
 
@@ -69,6 +69,16 @@ class SupplierService:
 
     def get_supplier_by_id(self, supplier_id: str, company_id: str) -> Optional[Supplier]:
         """Buscar fornecedor específico da empresa"""
+        return self.db.query(Supplier).filter(
+            and_(
+                Supplier.id == supplier_id,
+                Supplier.company_id == company_id,
+                Supplier.is_active == True
+            )
+        ).first()
+
+    def get_supplier_with_contacts(self, supplier_id: str, company_id: str) -> Optional[Supplier]:
+        """Buscar fornecedor com seus contatos"""
         return self.db.query(Supplier).filter(
             and_(
                 Supplier.id == supplier_id,
@@ -189,4 +199,106 @@ class SupplierService:
                     Supplier.city.ilike(search_pattern)
                 )
             )
-        ).limit(10).all() 
+        ).limit(10).all()
+
+    # Métodos para gerenciar contatos
+    def create_contact(self, supplier_id: str, contact_data: SupplierContactCreate, company_id: str) -> Optional[SupplierContact]:
+        """Criar um novo contato para o fornecedor"""
+        # Verificar se o fornecedor existe e pertence à empresa
+        supplier = self.get_supplier_by_id(supplier_id, company_id)
+        if not supplier:
+            return None
+
+        # Se este contato for principal, remover a flag principal dos outros contatos
+        if contact_data.is_primary:
+            self.db.query(SupplierContact).filter(
+                and_(
+                    SupplierContact.supplier_id == supplier_id,
+                    SupplierContact.company_id == company_id,
+                    SupplierContact.is_active == True
+                )
+            ).update({"is_primary": False})
+
+        contact = SupplierContact(
+            id=str(uuid.uuid4()),
+            supplier_id=supplier_id,
+            company_id=company_id,
+            **contact_data.dict()
+        )
+        self.db.add(contact)
+        self.db.commit()
+        self.db.refresh(contact)
+        return contact
+
+    def get_contacts(self, supplier_id: str, company_id: str) -> List[SupplierContact]:
+        """Buscar todos os contatos de um fornecedor"""
+        # Verificar se o fornecedor existe e pertence à empresa
+        supplier = self.get_supplier_by_id(supplier_id, company_id)
+        if not supplier:
+            return []
+
+        return self.db.query(SupplierContact).filter(
+            and_(
+                SupplierContact.supplier_id == supplier_id,
+                SupplierContact.company_id == company_id,
+                SupplierContact.is_active == True
+            )
+        ).all()
+
+    def get_contact_by_id(self, contact_id: str, supplier_id: str, company_id: str) -> Optional[SupplierContact]:
+        """Buscar contato específico"""
+        # Verificar se o fornecedor existe e pertence à empresa
+        supplier = self.get_supplier_by_id(supplier_id, company_id)
+        if not supplier:
+            return None
+
+        return self.db.query(SupplierContact).filter(
+            and_(
+                SupplierContact.id == contact_id,
+                SupplierContact.supplier_id == supplier_id,
+                SupplierContact.company_id == company_id,
+                SupplierContact.is_active == True
+            )
+        ).first()
+
+    def update_contact(
+        self, 
+        contact_id: str, 
+        supplier_id: str, 
+        contact_data: SupplierContactUpdate, 
+        company_id: str
+    ) -> Optional[SupplierContact]:
+        """Atualizar contato"""
+        contact = self.get_contact_by_id(contact_id, supplier_id, company_id)
+        if not contact:
+            return None
+
+        # Se este contato for marcado como principal, remover a flag dos outros
+        if contact_data.is_primary:
+            self.db.query(SupplierContact).filter(
+                and_(
+                    SupplierContact.supplier_id == supplier_id,
+                    SupplierContact.company_id == company_id,
+                    SupplierContact.id != contact_id,
+                    SupplierContact.is_active == True
+                )
+            ).update({"is_primary": False})
+
+        # Atualizar apenas campos fornecidos
+        update_data = contact_data.dict(exclude_unset=True)
+        for field, value in update_data.items():
+            setattr(contact, field, value)
+
+        self.db.commit()
+        self.db.refresh(contact)
+        return contact
+
+    def delete_contact(self, contact_id: str, supplier_id: str, company_id: str) -> bool:
+        """Deletar contato (soft delete)"""
+        contact = self.get_contact_by_id(contact_id, supplier_id, company_id)
+        if not contact:
+            return False
+
+        contact.is_active = False
+        self.db.commit()
+        return True 

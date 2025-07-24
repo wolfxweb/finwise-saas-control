@@ -330,7 +330,7 @@ export const supplierAPI = {
   },
 
   createSupplier: async (data: any) => {
-    const response = await api.post('/api/v1/suppliers', data);
+    const response = await api.post('/api/v1/suppliers/', data);
     return response.data;
   },
 
@@ -358,6 +358,32 @@ export const supplierAPI = {
     const response = await api.get('/api/v1/suppliers/search/quick', {
       params: { q: query }
     });
+    return response.data;
+  },
+
+  // Métodos para contatos
+  getSupplierWithContacts: async (id: string) => {
+    const response = await api.get(`/api/v1/suppliers/${id}/with-contacts`);
+    return response.data;
+  },
+
+  getContacts: async (supplierId: string) => {
+    const response = await api.get(`/api/v1/suppliers/${supplierId}/contacts`);
+    return response.data;
+  },
+
+  createContact: async (supplierId: string, data: any) => {
+    const response = await api.post(`/api/v1/suppliers/${supplierId}/contacts`, data);
+    return response.data;
+  },
+
+  updateContact: async (supplierId: string, contactId: string, data: any) => {
+    const response = await api.put(`/api/v1/suppliers/${supplierId}/contacts/${contactId}`, data);
+    return response.data;
+  },
+
+  deleteContact: async (supplierId: string, contactId: string) => {
+    const response = await api.delete(`/api/v1/suppliers/${supplierId}/contacts/${contactId}`);
     return response.data;
   },
 };

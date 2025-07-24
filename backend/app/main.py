@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from .core.config import settings
 from .core.database import engine, Base
+from .models.supplier import Supplier, SupplierContact
 from .api.v1 import auth, admin, company, billing, suppliers
 
 # Criar tabelas no banco de dados

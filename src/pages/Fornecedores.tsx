@@ -9,9 +9,23 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Switch } from "@/components/ui/switch";
 import { supplierAPI } from "@/services/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "@/hooks/use-toast";
+
+interface SupplierContact {
+  id: string;
+  name: string;
+  email?: string;
+  phone?: string;
+  cellphone?: string;
+  job_function?: string;
+  is_primary: boolean;
+  created_at: string;
+  updated_at?: string;
+}
 
 interface Supplier {
   id: string;
@@ -36,6 +50,7 @@ interface Supplier {
   notes?: string;
   created_at: string;
   updated_at?: string;
+  contacts?: SupplierContact[];
 }
 
 interface SupplierStats {
@@ -59,6 +74,14 @@ export default function Fornecedores() {
   const [isEditMode, setIsEditMode] = useState(false);
   const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [selectedCountry, setSelectedCountry] = useState<string>('Brasil');
+  const [selectedCategory, setSelectedCategory] = useState<string>('Tecnologia');
+  const [activeTab, setActiveTab] = useState<string>('info');
+  const [contacts, setContacts] = useState<SupplierContact[]>([]);
+  const [isContactDialogOpen, setIsContactDialogOpen] = useState(false);
+  const [isContactEditMode, setIsContactEditMode] = useState(false);
+  const [selectedContact, setSelectedContact] = useState<SupplierContact | null>(null);
+  const [isContactPrimary, setIsContactPrimary] = useState(false);
 
   useEffect(() => {
     loadSuppliers();
@@ -104,9 +127,20 @@ export default function Fornecedores() {
   };
 
   const handleCreateSupplier = async (formData: FormData) => {
+    console.log('handleCreateSupplier chamada');
     try {
       setIsSubmitting(true);
-      const data = {
+      
+      // Validar e processar credit_limit
+      const creditLimitValue = formData.get('credit_limit') as string;
+      const creditLimit = creditLimitValue && creditLimitValue !== '' ? parseFloat(creditLimitValue) : 0;
+      
+      // Função para processar campos opcionais
+      const processOptionalField = (value: string) => {
+        return value && value.trim() !== '' ? value : null;
+      };
+      
+      const rawData = {
         name: formData.get('name') as string,
         corporate_name: formData.get('corporate_name') as string,
         cnpj: formData.get('cnpj') as string,
@@ -118,12 +152,32 @@ export default function Fornecedores() {
         address: formData.get('address') as string,
         city: formData.get('city') as string,
         state: formData.get('state') as string,
-        country: formData.get('country') as string,
-        category: formData.get('category') as string,
+        country: selectedCountry,
+        category: selectedCategory,
         payment_terms: formData.get('payment_terms') as string,
-        credit_limit: parseFloat(formData.get('credit_limit') as string) || 0,
+        credit_limit: creditLimit,
         notes: formData.get('notes') as string,
       };
+      
+      // Processar campos opcionais
+              const data = {
+          ...rawData,
+          corporate_name: processOptionalField(rawData.corporate_name),
+          cnpj: processOptionalField(rawData.cnpj),
+          cpf: processOptionalField(rawData.cpf),
+          email: processOptionalField(rawData.email),
+          phone: processOptionalField(rawData.phone),
+          cellphone: processOptionalField(rawData.cellphone),
+          website: processOptionalField(rawData.website),
+          address: processOptionalField(rawData.address),
+          city: processOptionalField(rawData.city),
+          state: processOptionalField(rawData.state),
+          payment_terms: processOptionalField(rawData.payment_terms),
+          notes: processOptionalField(rawData.notes),
+        };
+      
+      console.log('Dados sendo enviados:', data);
+      console.log('Dados JSON:', JSON.stringify(data, null, 2));
 
       await supplierAPI.createSupplier(data);
       toast({
@@ -162,8 +216,8 @@ export default function Fornecedores() {
         address: formData.get('address') as string,
         city: formData.get('city') as string,
         state: formData.get('state') as string,
-        country: formData.get('country') as string,
-        category: formData.get('category') as string,
+        country: selectedCountry,
+        category: selectedCategory,
         payment_terms: formData.get('payment_terms') as string,
         credit_limit: parseFloat(formData.get('credit_limit') as string) || 0,
         notes: formData.get('notes') as string,
@@ -190,17 +244,27 @@ export default function Fornecedores() {
     }
   };
 
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [supplierToDelete, setSupplierToDelete] = useState<string | null>(null);
+
   const handleDeleteSupplier = async (supplierId: string) => {
-    if (!confirm('Tem certeza que deseja excluir este fornecedor?')) return;
+    setSupplierToDelete(supplierId);
+    setIsDeleteDialogOpen(true);
+  };
+
+  const confirmDeleteSupplier = async () => {
+    if (!supplierToDelete) return;
 
     try {
-      await supplierAPI.deleteSupplier(supplierId);
+      await supplierAPI.deleteSupplier(supplierToDelete);
       toast({
         title: "Sucesso",
         description: "Fornecedor excluído com sucesso!",
       });
       loadSuppliers();
       loadStats();
+      setIsDeleteDialogOpen(false);
+      setSupplierToDelete(null);
     } catch (error: any) {
       console.error('Erro ao excluir fornecedor:', error);
       toast({
@@ -213,14 +277,135 @@ export default function Fornecedores() {
 
   const openEditDialog = (supplier: Supplier) => {
     setSelectedSupplier(supplier);
+    setSelectedCountry(supplier.country || 'Brasil');
+    setSelectedCategory(supplier.category || 'Tecnologia');
     setIsEditMode(true);
     setIsDialogOpen(true);
+    loadContacts(supplier.id);
   };
 
   const openCreateDialog = () => {
     setSelectedSupplier(null);
+    setSelectedCountry('Brasil');
+    setSelectedCategory('Tecnologia');
     setIsEditMode(false);
     setIsDialogOpen(true);
+  };
+
+  const loadContacts = async (supplierId: string) => {
+    try {
+      const response = await supplierAPI.getContacts(supplierId);
+      setContacts(response);
+    } catch (error) {
+      console.error('Erro ao carregar contatos:', error);
+      toast({
+        title: "Erro",
+        description: "Não foi possível carregar os contatos.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleCreateContact = async (formData: FormData) => {
+    if (!selectedSupplier) return;
+
+    try {
+      setIsSubmitting(true);
+      const data = {
+        name: formData.get('name') as string,
+        email: formData.get('email') as string,
+        phone: formData.get('phone') as string,
+        cellphone: formData.get('cellphone') as string,
+        job_function: formData.get('job_function') as string,
+        is_primary: isContactPrimary,
+      };
+
+      await supplierAPI.createContact(selectedSupplier.id, data);
+      toast({
+        title: "Sucesso",
+        description: "Contato criado com sucesso!",
+      });
+      setIsContactDialogOpen(false);
+      loadContacts(selectedSupplier.id);
+    } catch (error: any) {
+      console.error('Erro ao criar contato:', error);
+      toast({
+        title: "Erro",
+        description: error.response?.data?.detail || "Erro ao criar contato",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleUpdateContact = async (formData: FormData) => {
+    if (!selectedSupplier || !selectedContact) return;
+
+    try {
+      setIsSubmitting(true);
+      const data = {
+        name: formData.get('name') as string,
+        email: formData.get('email') as string,
+        phone: formData.get('phone') as string,
+        cellphone: formData.get('cellphone') as string,
+        job_function: formData.get('job_function') as string,
+        is_primary: isContactPrimary,
+      };
+
+      await supplierAPI.updateContact(selectedSupplier.id, selectedContact.id, data);
+      toast({
+        title: "Sucesso",
+        description: "Contato atualizado com sucesso!",
+      });
+      setIsContactDialogOpen(false);
+      setSelectedContact(null);
+      setIsContactEditMode(false);
+      loadContacts(selectedSupplier.id);
+    } catch (error: any) {
+      console.error('Erro ao atualizar contato:', error);
+      toast({
+        title: "Erro",
+        description: error.response?.data?.detail || "Erro ao atualizar contato",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleDeleteContact = async (contactId: string) => {
+    if (!selectedSupplier || !confirm('Tem certeza que deseja excluir este contato?')) return;
+
+    try {
+      await supplierAPI.deleteContact(selectedSupplier.id, contactId);
+      toast({
+        title: "Sucesso",
+        description: "Contato excluído com sucesso!",
+      });
+      loadContacts(selectedSupplier.id);
+    } catch (error: any) {
+      console.error('Erro ao excluir contato:', error);
+      toast({
+        title: "Erro",
+        description: error.response?.data?.detail || "Erro ao excluir contato",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const openContactEditDialog = (contact: SupplierContact) => {
+    setSelectedContact(contact);
+    setIsContactPrimary(contact.is_primary);
+    setIsContactEditMode(true);
+    setIsContactDialogOpen(true);
+  };
+
+  const openContactCreateDialog = () => {
+    setSelectedContact(null);
+    setIsContactPrimary(false);
+    setIsContactEditMode(false);
+    setIsContactDialogOpen(true);
   };
 
   const getStatusBadge = (status: string) => {
@@ -273,7 +458,7 @@ export default function Fornecedores() {
         </Button>
         
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto" style={{ zIndex: 9999 }}>
+          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>
                 {isEditMode ? 'Editar Fornecedor' : 'Novo Fornecedor'}
@@ -282,15 +467,24 @@ export default function Fornecedores() {
                 {isEditMode ? 'Edite as informações do fornecedor' : 'Cadastre um novo fornecedor'}
               </DialogDescription>
             </DialogHeader>
-            <form onSubmit={async (e) => {
-              e.preventDefault();
-              const formData = new FormData(e.currentTarget);
-              if (isEditMode) {
-                await handleUpdateSupplier(formData);
-              } else {
-                await handleCreateSupplier(formData);
-              }
-            }} className="space-y-4">
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="info">Informações</TabsTrigger>
+                <TabsTrigger value="contacts">Contatos</TabsTrigger>
+              </TabsList>
+              
+              <TabsContent value="info" className="space-y-4">
+                <form onSubmit={async (e) => {
+                  console.log('onSubmit chamado');
+                  e.preventDefault();
+                  const formData = new FormData(e.currentTarget);
+                  console.log('FormData criado:', formData);
+                  if (isEditMode) {
+                    await handleUpdateSupplier(formData);
+                  } else {
+                    await handleCreateSupplier(formData);
+                  }
+                }} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="name">Nome Fantasia *</Label>
@@ -416,12 +610,13 @@ export default function Fornecedores() {
                   <Label htmlFor="country">País</Label>
                   <Select
                     name="country"
-                    defaultValue={selectedSupplier?.country || 'Brasil'}
+                    value={selectedCountry}
+                    onValueChange={setSelectedCountry}
                   >
                     <SelectTrigger id="country">
                       <SelectValue placeholder="Selecione o país" />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent position="popper" side="bottom" align="start">
                       <SelectItem value="Brasil">Brasil</SelectItem>
                       <SelectItem value="China">China</SelectItem>
                       <SelectItem value="Paraguai">Paraguai</SelectItem>
@@ -430,7 +625,26 @@ export default function Fornecedores() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="category">Categoria</Label>
+                  <Select
+                    name="category"
+                    value={selectedCategory}
+                    onValueChange={setSelectedCategory}
+                  >
+                    <SelectTrigger id="category">
+                      <SelectValue placeholder="Selecione a categoria" />
+                    </SelectTrigger>
+                    <SelectContent position="popper" side="bottom" align="start">
+                      <SelectItem value="Tecnologia">Tecnologia</SelectItem>
+                      <SelectItem value="Papelaria">Papelaria</SelectItem>
+                      <SelectItem value="Eletrônicos">Eletrônicos</SelectItem>
+                      <SelectItem value="Serviços">Serviços</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                
                 <div className="space-y-2">
                   <Label htmlFor="payment_terms">Condições de Pagamento</Label>
                   <Input
@@ -481,8 +695,85 @@ export default function Fornecedores() {
                 </Button>
               </div>
             </form>
-          </DialogContent>
-        </Dialog>
+          </TabsContent>
+          
+          <TabsContent value="contacts" className="space-y-4">
+            <div className="flex justify-between items-center">
+              <h3 className="text-lg font-semibold">Contatos do Fornecedor</h3>
+              <Button onClick={openContactCreateDialog} size="sm">
+                <Plus className="mr-2 h-4 w-4" />
+                Novo Contato
+              </Button>
+            </div>
+            
+            <div className="space-y-4">
+              {contacts.length === 0 ? (
+                <div className="text-center py-8">
+                  <p className="text-gray-500">Nenhum contato cadastrado</p>
+                  <p className="text-sm text-gray-400">Adicione o primeiro contato</p>
+                </div>
+              ) : (
+                contacts.map((contact) => (
+                  <Card key={contact.id}>
+                    <CardContent className="p-4">
+                      <div className="flex justify-between items-start">
+                        <div className="space-y-2">
+                          <div className="flex items-center space-x-2">
+                            <h4 className="font-medium">{contact.name}</h4>
+                            {contact.is_primary && (
+                              <Badge variant="secondary">Principal</Badge>
+                            )}
+                          </div>
+                          {contact.job_function && (
+                            <p className="text-sm text-gray-600">{contact.job_function}</p>
+                          )}
+                          <div className="space-y-1">
+                            {contact.email && (
+                              <div className="flex items-center text-sm">
+                                <Mail className="mr-1 h-3 w-3" />
+                                {contact.email}
+                              </div>
+                            )}
+                            {contact.phone && (
+                              <div className="flex items-center text-sm">
+                                <Phone className="mr-1 h-3 w-3" />
+                                {contact.phone}
+                              </div>
+                            )}
+                            {contact.cellphone && (
+                              <div className="flex items-center text-sm">
+                                <Phone className="mr-1 h-3 w-3" />
+                                {contact.cellphone}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex space-x-2">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => openContactEditDialog(contact)}
+                          >
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleDeleteContact(contact.id)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))
+              )}
+            </div>
+          </TabsContent>
+        </Tabs>
+      </DialogContent>
+    </Dialog>
       </div>
 
       {/* Cards de Resumo */}
@@ -681,6 +972,130 @@ export default function Fornecedores() {
           </div>
         </CardContent>
       </Card>
+      
+      {/* Diálogo para Contatos */}
+      <Dialog open={isContactDialogOpen} onOpenChange={setIsContactDialogOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>
+              {isContactEditMode ? 'Editar Contato' : 'Novo Contato'}
+            </DialogTitle>
+            <DialogDescription>
+              {isContactEditMode ? 'Edite as informações do contato' : 'Adicione um novo contato'}
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={async (e) => {
+            e.preventDefault();
+            const formData = new FormData(e.currentTarget);
+            if (isContactEditMode) {
+              await handleUpdateContact(formData);
+            } else {
+              await handleCreateContact(formData);
+            }
+          }} className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="contact_name">Nome *</Label>
+                <Input
+                  id="contact_name"
+                  name="name"
+                  defaultValue={selectedContact?.name || ''}
+                  required
+                  placeholder="Nome do contato"
+                />
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="contact_function">Função</Label>
+                                  <Input
+                    id="contact_function"
+                    name="job_function"
+                    defaultValue={selectedContact?.job_function || ''}
+                    placeholder="Cargo/função"
+                  />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="contact_email">Email</Label>
+                <Input
+                  id="contact_email"
+                  name="email"
+                  type="email"
+                  defaultValue={selectedContact?.email || ''}
+                  placeholder="email@exemplo.com"
+                />
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="contact_phone">Telefone</Label>
+                <Input
+                  id="contact_phone"
+                  name="phone"
+                  defaultValue={selectedContact?.phone || ''}
+                  placeholder="(11) 99999-9999"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="contact_cellphone">Celular</Label>
+              <Input
+                id="contact_cellphone"
+                name="cellphone"
+                defaultValue={selectedContact?.cellphone || ''}
+                placeholder="(11) 99999-9999"
+              />
+            </div>
+
+            <div className="flex items-center space-x-2">
+              <Switch
+                id="contact_is_primary"
+                checked={isContactPrimary}
+                onCheckedChange={setIsContactPrimary}
+              />
+              <Label htmlFor="contact_is_primary">Contato principal</Label>
+            </div>
+
+            <div className="flex justify-end space-x-2">
+              <Button type="button" variant="outline" onClick={() => setIsContactDialogOpen(false)}>
+                Cancelar
+              </Button>
+              <Button type="submit" disabled={isSubmitting}>
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Salvando...
+                  </>
+                ) : (
+                  isContactEditMode ? 'Atualizar' : 'Criar'
+                )}
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de Confirmação de Exclusão */}
+      <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Confirmar Exclusão</DialogTitle>
+            <DialogDescription>
+              Tem certeza que deseja excluir este fornecedor? Esta ação não pode ser desfeita.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end space-x-2">
+            <Button variant="outline" onClick={() => setIsDeleteDialogOpen(false)}>
+              Cancelar
+            </Button>
+            <Button variant="destructive" onClick={confirmDeleteSupplier}>
+              Excluir
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 } 

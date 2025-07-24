@@ -9,7 +9,11 @@ from app.schemas.supplier import (
     SupplierCreate, 
     SupplierUpdate, 
     SupplierResponse, 
-    SupplierListResponse
+    SupplierListResponse,
+    SupplierContactCreate,
+    SupplierContactUpdate,
+    SupplierContactResponse,
+    SupplierWithContactsResponse
 )
 
 router = APIRouter()
@@ -28,9 +32,13 @@ def create_supplier(
         raise HTTPException(status_code=403, detail="Usuário não está associado a uma empresa")
     
     try:
+        print(f"Dados recebidos: {supplier_data.dict()}")
         supplier = supplier_service.create_supplier(supplier_data, current_user.company_id)
         return supplier
     except Exception as e:
+        print(f"Erro ao criar fornecedor: {str(e)}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=400, detail=str(e))
 
 @router.get("/", response_model=SupplierListResponse)
@@ -78,6 +86,22 @@ def get_supplier(
         raise HTTPException(status_code=403, detail="Usuário não está associado a uma empresa")
     
     supplier = supplier_service.get_supplier_by_id(supplier_id, current_user.company_id)
+    if not supplier:
+        raise HTTPException(status_code=404, detail="Fornecedor não encontrado")
+    
+    return supplier
+
+@router.get("/{supplier_id}/with-contacts", response_model=SupplierWithContactsResponse)
+def get_supplier_with_contacts(
+    supplier_id: str,
+    current_user: User = Depends(get_current_user),
+    supplier_service: SupplierService = Depends(get_supplier_service)
+):
+    """Obter detalhes de um fornecedor com seus contatos"""
+    if not current_user.company_id:
+        raise HTTPException(status_code=403, detail="Usuário não está associado a uma empresa")
+    
+    supplier = supplier_service.get_supplier_with_contacts(supplier_id, current_user.company_id)
     if not supplier:
         raise HTTPException(status_code=404, detail="Fornecedor não encontrado")
     
@@ -149,4 +173,94 @@ def quick_search_suppliers(
         raise HTTPException(status_code=403, detail="Usuário não está associado a uma empresa")
     
     suppliers = supplier_service.search_suppliers(current_user.company_id, q)
-    return suppliers 
+    return suppliers
+
+# Endpoints para gerenciar contatos
+@router.post("/{supplier_id}/contacts", response_model=SupplierContactResponse)
+def create_contact(
+    supplier_id: str,
+    contact_data: SupplierContactCreate,
+    current_user: User = Depends(get_current_user),
+    supplier_service: SupplierService = Depends(get_supplier_service)
+):
+    """Criar um novo contato para o fornecedor"""
+    if not current_user.company_id:
+        raise HTTPException(status_code=403, detail="Usuário não está associado a uma empresa")
+    
+    try:
+        print(f"Dados do contato recebidos: {contact_data.dict()}")
+        contact = supplier_service.create_contact(supplier_id, contact_data, current_user.company_id)
+        if not contact:
+            raise HTTPException(status_code=404, detail="Fornecedor não encontrado")
+        
+        return contact
+    except Exception as e:
+        print(f"Erro ao criar contato: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=400, detail=str(e))
+
+@router.get("/{supplier_id}/contacts", response_model=List[SupplierContactResponse])
+def get_contacts(
+    supplier_id: str,
+    current_user: User = Depends(get_current_user),
+    supplier_service: SupplierService = Depends(get_supplier_service)
+):
+    """Listar todos os contatos de um fornecedor"""
+    if not current_user.company_id:
+        raise HTTPException(status_code=403, detail="Usuário não está associado a uma empresa")
+    
+    contacts = supplier_service.get_contacts(supplier_id, current_user.company_id)
+    return contacts
+
+@router.get("/{supplier_id}/contacts/{contact_id}", response_model=SupplierContactResponse)
+def get_contact(
+    supplier_id: str,
+    contact_id: str,
+    current_user: User = Depends(get_current_user),
+    supplier_service: SupplierService = Depends(get_supplier_service)
+):
+    """Obter detalhes de um contato específico"""
+    if not current_user.company_id:
+        raise HTTPException(status_code=403, detail="Usuário não está associado a uma empresa")
+    
+    contact = supplier_service.get_contact_by_id(contact_id, supplier_id, current_user.company_id)
+    if not contact:
+        raise HTTPException(status_code=404, detail="Contato não encontrado")
+    
+    return contact
+
+@router.put("/{supplier_id}/contacts/{contact_id}", response_model=SupplierContactResponse)
+def update_contact(
+    supplier_id: str,
+    contact_id: str,
+    contact_data: SupplierContactUpdate,
+    current_user: User = Depends(get_current_user),
+    supplier_service: SupplierService = Depends(get_supplier_service)
+):
+    """Atualizar um contato"""
+    if not current_user.company_id:
+        raise HTTPException(status_code=403, detail="Usuário não está associado a uma empresa")
+    
+    contact = supplier_service.update_contact(contact_id, supplier_id, contact_data, current_user.company_id)
+    if not contact:
+        raise HTTPException(status_code=404, detail="Contato não encontrado")
+    
+    return contact
+
+@router.delete("/{supplier_id}/contacts/{contact_id}")
+def delete_contact(
+    supplier_id: str,
+    contact_id: str,
+    current_user: User = Depends(get_current_user),
+    supplier_service: SupplierService = Depends(get_supplier_service)
+):
+    """Deletar um contato (soft delete)"""
+    if not current_user.company_id:
+        raise HTTPException(status_code=403, detail="Usuário não está associado a uma empresa")
+    
+    success = supplier_service.delete_contact(contact_id, supplier_id, current_user.company_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Contato não encontrado")
+    
+    return {"message": "Contato deletado com sucesso"} 
