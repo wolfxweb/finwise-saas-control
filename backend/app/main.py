@@ -3,7 +3,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from .core.config import settings
 from .core.database import engine, Base
 from .models.supplier import Supplier, SupplierContact
-from .api.v1 import auth, admin, company, billing, suppliers
+from .models.nota_fiscal import NotaFiscal, NotaFiscalProduto
+from .models.company import Company, Branch
+from .models.user import User, Permission, UserPermission
+from .api.v1 import auth, admin, company, billing, suppliers, nota_fiscal
 
 # Criar tabelas no banco de dados
 Base.metadata.create_all(bind=engine)
@@ -30,6 +33,7 @@ app.include_router(admin.router, prefix=f"{settings.API_V1_STR}/admin", tags=["a
 app.include_router(company.router, prefix=f"{settings.API_V1_STR}/company", tags=["company"])
 app.include_router(billing.router, prefix=f"{settings.API_V1_STR}/billing", tags=["billing"])
 app.include_router(suppliers.router, prefix=f"{settings.API_V1_STR}/suppliers", tags=["suppliers"])
+app.include_router(nota_fiscal.router, prefix=f"{settings.API_V1_STR}/notas-fiscais", tags=["notas-fiscais"])
 
 @app.get("/")
 async def root():

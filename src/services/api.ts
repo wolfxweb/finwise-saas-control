@@ -388,4 +388,75 @@ export const supplierAPI = {
   },
 };
 
+// Funções de API para notas fiscais
+export const notaFiscalAPI = {
+  // Listar notas fiscais
+  getNotasFiscais: async (params?: {
+    skip?: number;
+    limit?: number;
+  }) => {
+    const response = await api.get('/api/v1/notas-fiscais', { params });
+    return response.data;
+  },
+
+  // Buscar nota fiscal específica
+  getNotaFiscal: async (id: number) => {
+    const response = await api.get(`/api/v1/notas-fiscais/${id}`);
+    return response.data;
+  },
+
+  // Criar nota fiscal manualmente
+  createNotaFiscal: async (data: any) => {
+    const response = await api.post('/api/v1/notas-fiscais', data);
+    return response.data;
+  },
+
+  // Importar nota fiscal via XML
+  importNotaFiscal: async (data: {
+    xml_content: string;
+    xml_filename: string;
+    tipo: string;
+    origem: string;
+  }) => {
+    const response = await api.post('/api/v1/notas-fiscais/import', data);
+    return response.data;
+  },
+
+  // Atualizar nota fiscal
+  updateNotaFiscal: async (id: number, data: any) => {
+    const response = await api.put(`/api/v1/notas-fiscais/${id}`, data);
+    return response.data;
+  },
+
+  // Deletar nota fiscal
+  deleteNotaFiscal: async (id: number) => {
+    const response = await api.delete(`/api/v1/notas-fiscais/${id}`);
+    return response.data;
+  },
+
+  // Download XML da nota fiscal
+  downloadXML: async (id: number) => {
+    const response = await api.get(`/api/v1/notas-fiscais/${id}/xml`, {
+      responseType: 'blob'
+    });
+    return response.data;
+  },
+
+  // Download PDF da nota fiscal
+  downloadPDF: async (id: number) => {
+    const response = await api.get(`/api/v1/notas-fiscais/${id}/pdf`, {
+      responseType: 'blob'
+    });
+    return response.data;
+  },
+
+  // Verificar se nota fiscal já existe
+  checkNotaFiscalExists: async (numero: string, emitenteCnpj: string) => {
+    const response = await api.get('/api/v1/notas-fiscais/check-exists', {
+      params: { numero, emitente_cnpj: emitenteCnpj }
+    });
+    return response.data;
+  },
+};
+
 export default api; 

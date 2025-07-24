@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Plus, Search, Filter, Download, Edit, Eye, Building, Phone, Mail, MapPin, Star, Trash2, Loader2, AlertCircle } from "lucide-react";
+import { Plus, Search, Filter, Download, Edit, Eye, Building, Phone, Mail, MapPin, Trash2, Loader2, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -792,7 +792,7 @@ export default function Fornecedores() {
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Fornecedores Ativos</CardTitle>
-              <Star className="h-4 w-4 text-success" />
+              <Building className="h-4 w-4 text-success" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-success">{stats.active_suppliers}</div>
@@ -811,16 +811,7 @@ export default function Fornecedores() {
               <p className="text-xs text-muted-foreground">Fornecedores</p>
             </CardContent>
           </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Avaliação Média</CardTitle>
-              <Star className="h-4 w-4 text-warning" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-warning">{stats.average_rating}</div>
-              <p className="text-xs text-muted-foreground">de 5 estrelas</p>
-            </CardContent>
-          </Card>
+
         </div>
       )}
 
@@ -880,9 +871,8 @@ export default function Fornecedores() {
                   <TableHead>CNPJ/CPF</TableHead>
                   <TableHead>Contato</TableHead>
                   <TableHead>Localização</TableHead>
-                  <TableHead>Categoria</TableHead>
-                  <TableHead>Avaliação</TableHead>
-                  <TableHead>Limite</TableHead>
+                                  <TableHead>Categoria</TableHead>
+                <TableHead>Limite</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Ações</TableHead>
                 </TableRow>
@@ -890,7 +880,7 @@ export default function Fornecedores() {
               <TableBody>
                 {suppliers.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={9} className="text-center py-8">
+                    <TableCell colSpan={8} className="text-center py-8">
                       <div className="text-center">
                         <Building className="h-12 w-12 text-gray-400 mx-auto mb-4" />
                         <p className="text-gray-500">Nenhum fornecedor encontrado</p>
@@ -932,16 +922,6 @@ export default function Fornecedores() {
                         )}
                       </TableCell>
                       <TableCell>{supplier.category || '-'}</TableCell>
-                      <TableCell>
-                        {supplier.rating > 0 ? (
-                          <div className="flex items-center space-x-1">
-                            <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
-                            <span>{supplier.rating}</span>
-                          </div>
-                        ) : (
-                          '-'
-                        )}
-                      </TableCell>
                       <TableCell>
                         {supplier.credit_limit ? formatCurrency(supplier.credit_limit) : '-'}
                       </TableCell>

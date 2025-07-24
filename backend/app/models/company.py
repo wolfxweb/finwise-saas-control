@@ -26,6 +26,7 @@ class Company(Base):
     # Relacionamentos
     users = relationship("User", back_populates="company")
     branches = relationship("Branch", back_populates="company")
+    notas_fiscais = relationship("NotaFiscal", back_populates="company")
 
 class Branch(Base):
     __tablename__ = "branches"
