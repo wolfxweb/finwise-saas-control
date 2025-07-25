@@ -2521,7 +2521,7 @@ export default function NotaFiscal() {
                     <CardContent>
                       {/* Filtros */}
                       <div className="mb-6 space-y-4">
-                        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                           {/* Busca */}
                           <div className="space-y-2">
                             <Label htmlFor="busca-rentabilidade">Buscar</Label>
@@ -2533,21 +2533,7 @@ export default function NotaFiscal() {
                             />
                           </div>
 
-                          {/* Categoria */}
-                          <div className="space-y-2">
-                            <Label htmlFor="categoria-rentabilidade">Categoria</Label>
-                            <Select value={filtroRentabilidade.categoria} onValueChange={(value) => setFiltroRentabilidade(prev => ({ ...prev, categoria: value }))}>
-                              <SelectTrigger>
-                                <SelectValue placeholder="Todas as categorias" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="">Todas as categorias</SelectItem>
-                                <SelectItem value="A">Categoria A (80% do faturamento)</SelectItem>
-                                <SelectItem value="B">Categoria B (15% do faturamento)</SelectItem>
-                                <SelectItem value="C">Categoria C (5% do faturamento)</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </div>
+
 
                           {/* Curva ABC */}
                           <div className="space-y-2">
@@ -2752,7 +2738,7 @@ export default function NotaFiscal() {
                                 onClick={() => handleOrdenacaoRentabilidade('categoria')}
                               >
                                 <div className="flex items-center justify-center space-x-1">
-                                  <span>Categoria</span>
+                                  <span>Curva ABC</span>
                                   {getIconeOrdenacao('categoria')}
                                 </div>
                               </TableHead>
