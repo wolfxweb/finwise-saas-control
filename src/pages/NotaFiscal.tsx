@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from "react";
-import { Plus, Search, Filter, Download, Edit, Eye, Receipt, FileText, CheckCircle, Clock, Upload, FileArchive, Trash2, FileDown, ChevronUp, ChevronDown } from "lucide-react";
+import { Plus, Search, Filter, Download, Edit, Eye, Receipt, FileText, CheckCircle, Clock, Upload, FileArchive, Trash2, FileDown, ChevronUp, ChevronDown, BarChart3, DollarSign, TrendingUp, MapPin, X } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -8,12 +9,42 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { notaFiscalAPI } from "@/services/api";
 import { toast } from "sonner";
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+  PieChart as RechartsPieChart,
+  Pie,
+  Cell,
+  AreaChart,
+  Area
+} from 'recharts';
 
 export default function NotaFiscal() {
+  const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState("");
   const [isImporting, setIsImporting] = useState(false);
+  
+  // Estados para filtros
+  const [isFilterDialogOpen, setIsFilterDialogOpen] = useState(false);
+  const [filters, setFilters] = useState({
+    status: '',
+    tipo: '',
+    dataInicio: '',
+    dataFim: '',
+    valorMin: '',
+    valorMax: '',
+    cliente: '',
+    numero: ''
+  });
   const [importProgress, setImportProgress] = useState(0);
   const [importedCount, setImportedCount] = useState(0);
   const [importErrors, setImportErrors] = useState<string[]>([]);
@@ -50,19 +81,95 @@ export default function NotaFiscal() {
     emitidas: 0
   });
 
+  // Estados para relatórios
+  const [periodoRelatorio, setPeriodoRelatorio] = useState('ultimo_mes');
+
+  const [dadosProdutos, setDadosProdutos] = useState<any[]>([]);
+  const [dadosTemporal, setDadosTemporal] = useState<any[]>([]);
+
+  const [dadosValor, setDadosValor] = useState<any[]>([]);
+
+  // Estados para filtros de rentabilidade
+  const [filtroRentabilidade, setFiltroRentabilidade] = useState({
+    categoria: '',
+    busca: '',
+    rentabilidadeMin: '',
+    rentabilidadeMax: '',
+    quantidadeMin: '',
+    quantidadeMax: '',
+    valorMin: '',
+    valorMax: '',
+    percentualMin: '',
+    percentualMax: ''
+  });
+  const [ordenacaoRentabilidade, setOrdenacaoRentabilidade] = useState({
+    campo: 'rentabilidade',
+    direcao: 'desc' as 'asc' | 'desc'
+  });
+
+  // Estados para filtros de Pareto
+  const [filtroPareto, setFiltroPareto] = useState({
+    busca: '',
+    pareto: '',
+    quantidadeMin: '',
+    quantidadeMax: '',
+    valorMin: '',
+    valorMax: '',
+    percentualMin: '',
+    percentualMax: ''
+  });
+  const [ordenacaoPareto, setOrdenacaoPareto] = useState({
+    campo: 'valor',
+    direcao: 'desc' as 'asc' | 'desc'
+  });
+
+  // Estados para filtros de Pareto por quantidade
+  const [filtroParetoQuantidade, setFiltroParetoQuantidade] = useState({
+    busca: '',
+    pareto: '',
+    quantidadeMin: '',
+    quantidadeMax: '',
+    valorMin: '',
+    valorMax: '',
+    percentualMin: '',
+    percentualMax: ''
+  });
+  const [ordenacaoParetoQuantidade, setOrdenacaoParetoQuantidade] = useState({
+    campo: 'quantidade',
+    direcao: 'desc' as 'asc' | 'desc'
+  });
+
   // Carregar notas fiscais
   useEffect(() => {
     loadNotasFiscais();
   }, []);
 
+  // Processar dados dos relatórios quando notas fiscais mudarem
+  useEffect(() => {
+    if (notasFiscais.length > 0) {
+      console.log('🔄 Processando relatórios com', notasFiscais.length, 'notas fiscais');
+      processarDadosRelatorios();
+    }
+  }, [notasFiscais, periodoRelatorio]);
+
   const loadNotasFiscais = async () => {
     try {
       setLoading(true);
+      console.log('🔄 Carregando notas fiscais...');
+      
+      // Buscar TODAS as notas fiscais da empresa
       const response = await notaFiscalAPI.getNotasFiscais();
+      console.log('✅ Notas fiscais carregadas:', response.length, 'notas');
+      console.log('📋 Primeira nota:', response[0]);
+      
+      // Verificar se há produtos nas notas fiscais
+      const notasComProdutos = response.filter(nota => nota.produtos && nota.produtos.length > 0);
+      console.log('📦 Notas com produtos:', notasComProdutos.length);
+      
       setNotasFiscais(response);
       calculateStats(response);
     } catch (error) {
-      console.error("Erro ao carregar notas fiscais:", error);
+      console.error("❌ Erro ao carregar notas fiscais:", error);
       toast.error("Erro ao carregar notas fiscais");
     } finally {
       setLoading(false);
@@ -561,9 +668,59 @@ export default function NotaFiscal() {
     setCurrentPage(1); // Reset para primeira página ao ordenar
   };
 
+  // Função para aplicar filtros
+  const applyFilters = (data: any[]) => {
+    return data.filter(nota => {
+      // Filtro por busca geral
+      if (searchTerm) {
+        const searchLower = searchTerm.toLowerCase();
+        const matchesSearch = 
+          nota.numero?.toLowerCase().includes(searchLower) ||
+          nota.destinatario_nome?.toLowerCase().includes(searchLower) ||
+          nota.emitente_nome?.toLowerCase().includes(searchLower) ||
+          nota.xml_filename?.toLowerCase().includes(searchLower);
+        if (!matchesSearch) return false;
+      }
+
+      // Filtro por status
+      if (filters.status && nota.status !== filters.status) return false;
+
+      // Filtro por tipo
+      if (filters.tipo && nota.tipo !== filters.tipo) return false;
+
+      // Filtro por número
+      if (filters.numero && !nota.numero?.includes(filters.numero)) return false;
+
+      // Filtro por cliente
+      if (filters.cliente && !nota.destinatario_nome?.toLowerCase().includes(filters.cliente.toLowerCase())) return false;
+
+      // Filtro por data
+      if (filters.dataInicio || filters.dataFim) {
+        const dataNota = new Date(nota.data_emissao);
+        if (filters.dataInicio) {
+          const dataInicio = new Date(filters.dataInicio);
+          if (dataNota < dataInicio) return false;
+        }
+        if (filters.dataFim) {
+          const dataFim = new Date(filters.dataFim);
+          dataFim.setHours(23, 59, 59, 999); // Incluir todo o dia
+          if (dataNota > dataFim) return false;
+        }
+      }
+
+      // Filtro por valor
+      const valorNota = parseFloat(nota.valor_total || 0);
+      if (filters.valorMin && valorNota < parseFloat(filters.valorMin)) return false;
+      if (filters.valorMax && valorNota > parseFloat(filters.valorMax)) return false;
+
+      return true;
+    });
+  };
+
   // Função para obter dados paginados e ordenados
   const getPaginatedData = () => {
-    const sortedData = sortData(notasFiscais);
+    const filteredData = applyFilters(notasFiscais);
+    const sortedData = sortData(filteredData);
     const startIndex = (currentPage - 1) * itemsPerPage;
     const endIndex = startIndex + itemsPerPage;
     return sortedData.slice(startIndex, endIndex);
@@ -571,7 +728,8 @@ export default function NotaFiscal() {
 
   // Função para obter total de páginas
   const getTotalPages = () => {
-    return Math.ceil(notasFiscais.length / itemsPerPage);
+    const filteredData = applyFilters(notasFiscais);
+    return Math.ceil(filteredData.length / itemsPerPage);
   };
 
   // Função para renderizar ícone de ordenação
@@ -595,6 +753,656 @@ export default function NotaFiscal() {
     const sign = variation >= 0 ? '+' : '';
     const color = variation >= 0 ? 'text-green-600' : 'text-red-600';
     return { text: `${sign}${variation.toFixed(1)}%`, color };
+  };
+
+  // Função para limpar filtros
+  const clearFilters = () => {
+    setFilters({
+      status: '',
+      tipo: '',
+      dataInicio: '',
+      dataFim: '',
+      valorMin: '',
+      valorMax: '',
+      cliente: '',
+      numero: ''
+    });
+    setSearchTerm('');
+    setCurrentPage(1);
+  };
+
+  // Função para aplicar filtros
+  const handleApplyFilters = () => {
+    setCurrentPage(1);
+    setIsFilterDialogOpen(false);
+  };
+
+  // Função para verificar se há filtros ativos
+  const hasActiveFilters = () => {
+    return Object.values(filters).some(value => value !== '') || searchTerm !== '';
+  };
+
+  // Funções para relatórios
+  const processarDadosRelatorios = () => {
+    const dadosFiltrados = filtrarPorPeriodo(notasFiscais, periodoRelatorio);
+    console.log('📊 Dados filtrados para relatórios:', dadosFiltrados.length);
+    
+
+
+    // Dados por produtos
+    const produtos = processarDadosProdutos(dadosFiltrados);
+    console.log('📦 Dados de produtos processados:', produtos.length, 'produtos');
+    setDadosProdutos(produtos);
+
+    // Dados temporais
+    const temporal = processarDadosTemporal(dadosFiltrados);
+    setDadosTemporal(temporal);
+
+
+
+    // Dados por faixa de valor
+    const valor = processarDadosValor(dadosFiltrados);
+    setDadosValor(valor);
+  };
+
+  const filtrarPorPeriodo = (dados: any[], periodo: string) => {
+    const agora = new Date();
+    const inicio = new Date();
+
+    switch (periodo) {
+      case 'ultima_semana':
+        inicio.setDate(agora.getDate() - 7);
+        break;
+      case 'ultimo_mes':
+        inicio.setMonth(agora.getMonth() - 1);
+        break;
+      case 'ultimos_3_meses':
+        inicio.setMonth(agora.getMonth() - 3);
+        break;
+      case 'ultimo_ano':
+        inicio.setFullYear(agora.getFullYear() - 1);
+        break;
+      default:
+        return dados;
+    }
+
+    return dados.filter(nota => {
+      const dataNota = new Date(nota.data_emissao);
+      return dataNota >= inicio && dataNota <= agora;
+    });
+  };
+
+
+
+  const processarDadosProdutos = (dados: any[]) => {
+    console.log('🔍 Processando dados de produtos:', dados.length, 'notas fiscais');
+    
+    const produtos: { [key: string]: { 
+      quantidade: number; 
+      valor: number; 
+      descricao: string;
+      valor_unitario_total: number;
+      contador: number;
+    } } = {};
+    
+    dados.forEach((nota, index) => {
+      console.log(`📄 Nota ${index + 1}:`, {
+        id: nota.id,
+        numero: nota.numero,
+        produtos: nota.produtos ? nota.produtos.length : 0
+      });
+      
+      // Usar a tabela notas_fiscais_produtos através do relacionamento
+      if (nota.produtos && Array.isArray(nota.produtos)) {
+        nota.produtos.forEach((produto: any) => {
+          // Usar a coluna codigo da tabela notas_fiscais_produtos
+          const codigo = produto.codigo || 'Sem código';
+          if (!produtos[codigo]) {
+            produtos[codigo] = { 
+              quantidade: 0, 
+              valor: 0, 
+              descricao: produto.descricao || 'Sem descrição',
+              valor_unitario_total: 0,
+              contador: 0
+            };
+          }
+          produtos[codigo].quantidade += parseFloat(produto.quantidade || 0);
+          produtos[codigo].valor += parseFloat(produto.valor_total || 0);
+          produtos[codigo].valor_unitario_total += parseFloat(produto.valor_unitario || 0);
+          produtos[codigo].contador += 1;
+        });
+      }
+    });
+
+    const resultado = Object.entries(produtos)
+      .map(([codigo, dados]) => ({
+        codigo,
+        descricao: dados.descricao,
+        quantidade: dados.quantidade,
+        valor: dados.valor,
+        valor_unitario_medio: dados.contador > 0 ? dados.valor_unitario_total / dados.contador : 0
+      }))
+      .sort((a, b) => b.valor - a.valor)
+      .slice(0, 15);
+    
+    console.log('📊 Resultado produtos:', resultado);
+    return resultado;
+  };
+
+  const processarDadosTemporal = (dados: any[]) => {
+    const temporal: { [key: string]: { quantidade: number; valor: number } } = {};
+    
+    dados.forEach(nota => {
+      const data = new Date(nota.data_emissao);
+      const mesAno = `${data.getMonth() + 1}/${data.getFullYear()}`;
+      
+      if (!temporal[mesAno]) {
+        temporal[mesAno] = { quantidade: 0, valor: 0 };
+      }
+      temporal[mesAno].quantidade += 1;
+      temporal[mesAno].valor += parseFloat(nota.valor_total || 0);
+    });
+
+    return Object.entries(temporal)
+      .map(([periodo, dados]) => ({
+        periodo,
+        quantidade: dados.quantidade,
+        valor: dados.valor
+      }))
+      .sort((a, b) => {
+        const [mesA, anoA] = a.periodo.split('/');
+        const [mesB, anoB] = b.periodo.split('/');
+        return new Date(parseInt(anoA), parseInt(mesA) - 1).getTime() - new Date(parseInt(anoB), parseInt(mesB) - 1).getTime();
+      });
+  };
+
+
+
+  const processarDadosValor = (dados: any[]) => {
+    const faixas = [
+      { nome: 'R$ 0 - R$ 30', min: 0, max: 30 },
+      { nome: 'R$ 30 - R$ 60', min: 30, max: 60 },
+      { nome: 'R$ 60 - R$ 100', min: 60, max: 100 },
+      { nome: 'R$ 100 - R$ 150', min: 100, max: 150 },
+      { nome: 'Acima de R$ 150', min: 150, max: Infinity }
+    ];
+
+    const contadores = faixas.map(faixa => {
+      const notasNaFaixa = dados.filter(nota => {
+        const valor = parseFloat(nota.valor_total || 0);
+        return valor >= faixa.min && valor < faixa.max;
+      });
+      
+      const quantidade = notasNaFaixa.length;
+      const valorTotal = notasNaFaixa.reduce((sum, nota) => sum + parseFloat(nota.valor_total || 0), 0);
+      
+      return {
+        faixa: faixa.nome,
+        quantidade,
+        valor_total: valorTotal
+      };
+    });
+
+    return contadores.filter(item => item.quantidade > 0);
+  };
+
+
+
+  // Funções para análise de rentabilidade usando Curva ABC
+  const getCategoriaABC = (valor: number, todosProdutos: any[]) => {
+    if (todosProdutos.length === 0) return 'C';
+    
+    // Ordenar produtos por valor (decrescente)
+    const produtosOrdenados = [...todosProdutos].sort((a, b) => b.valor - a.valor);
+    
+    // Calcular faturamento total
+    const faturamentoTotal = produtosOrdenados.reduce((sum, p) => sum + p.valor, 0);
+    
+    // Calcular percentual acumulado para cada produto
+    let percentualAcumulado = 0;
+    let categoria = 'C';
+    
+    for (const produto of produtosOrdenados) {
+      const percentualProduto = (produto.valor / faturamentoTotal) * 100;
+      percentualAcumulado += percentualProduto;
+      
+      if (produto.valor === valor) {
+        // Classificar baseado no percentual acumulado (Curva ABC)
+        if (percentualAcumulado <= 80) {
+          categoria = 'A'; // 80% do faturamento - produtos mais importantes
+        } else if (percentualAcumulado <= 95) {
+          categoria = 'B'; // 15% do faturamento - produtos de importância média
+        } else {
+          categoria = 'C'; // 5% do faturamento - produtos menos importantes
+        }
+        break;
+      }
+    }
+    
+    return categoria;
+  };
+
+  const getRowClassByCategoria = (categoria: string) => {
+    switch (categoria) {
+      case 'A': return 'bg-green-50 font-semibold border-l-4 border-l-green-500';
+      case 'B': return 'bg-yellow-50 font-semibold border-l-4 border-l-yellow-500';
+      case 'C': return 'bg-red-50 border-l-4 border-l-red-500';
+      default: return '';
+    }
+  };
+
+  const getBadgeVariantByCategoria = (categoria: string) => {
+    switch (categoria) {
+      case 'A': return 'default';
+      case 'B': return 'default';
+      case 'C': return 'destructive';
+      default: return 'secondary';
+    }
+  };
+
+  const getBadgeClassByCategoria = (categoria: string) => {
+    switch (categoria) {
+      case 'A': return 'bg-green-600 text-white font-bold';
+      case 'B': return 'bg-yellow-600 text-white font-bold';
+      case 'C': return 'bg-red-600 text-white';
+      default: return '';
+    }
+  };
+
+  // Funções para processar dados de rentabilidade
+  const processarDadosRentabilidade = () => {
+    if (dadosProdutos.length === 0) return [];
+
+    // Calcular faturamento total para percentual
+    const faturamentoTotal = dadosProdutos.reduce((sum, produto) => sum + produto.valor, 0);
+
+    // Calcular métricas de rentabilidade
+    const produtosComRentabilidade = dadosProdutos.map(produto => {
+      const rentabilidade = produto.quantidade > 0 ? produto.valor / produto.quantidade : 0;
+      const percentualFaturamento = faturamentoTotal > 0 ? (produto.valor / faturamentoTotal) * 100 : 0;
+      return {
+        ...produto,
+        rentabilidade,
+        percentual_faturamento: percentualFaturamento,
+        categoria: getCategoriaABC(produto.valor, dadosProdutos)
+      };
+    });
+
+    // Aplicar filtros
+    let dadosFiltrados = produtosComRentabilidade.filter(produto => {
+      // Filtro por categoria
+      if (filtroRentabilidade.categoria && produto.categoria !== filtroRentabilidade.categoria) {
+        return false;
+      }
+
+      // Filtro por busca
+      if (filtroRentabilidade.busca) {
+        const busca = filtroRentabilidade.busca.toLowerCase();
+        const matchCodigo = produto.codigo.toLowerCase().includes(busca);
+        const matchDescricao = produto.descricao.toLowerCase().includes(busca);
+        if (!matchCodigo && !matchDescricao) return false;
+      }
+
+      // Filtro por rentabilidade
+      if (filtroRentabilidade.rentabilidadeMin && produto.rentabilidade < parseFloat(filtroRentabilidade.rentabilidadeMin)) {
+        return false;
+      }
+      if (filtroRentabilidade.rentabilidadeMax && produto.rentabilidade > parseFloat(filtroRentabilidade.rentabilidadeMax)) {
+        return false;
+      }
+
+      // Filtro por quantidade
+      if (filtroRentabilidade.quantidadeMin && produto.quantidade < parseFloat(filtroRentabilidade.quantidadeMin)) {
+        return false;
+      }
+      if (filtroRentabilidade.quantidadeMax && produto.quantidade > parseFloat(filtroRentabilidade.quantidadeMax)) {
+        return false;
+      }
+
+      // Filtro por valor
+      if (filtroRentabilidade.valorMin && produto.valor < parseFloat(filtroRentabilidade.valorMin)) {
+        return false;
+      }
+      if (filtroRentabilidade.valorMax && produto.valor > parseFloat(filtroRentabilidade.valorMax)) {
+        return false;
+      }
+
+      // Filtro por percentual de faturamento
+      if (filtroRentabilidade.percentualMin && produto.percentual_faturamento < parseFloat(filtroRentabilidade.percentualMin)) {
+        return false;
+      }
+      if (filtroRentabilidade.percentualMax && produto.percentual_faturamento > parseFloat(filtroRentabilidade.percentualMax)) {
+        return false;
+      }
+
+      return true;
+    });
+
+    // Aplicar ordenação
+    dadosFiltrados.sort((a, b) => {
+      let aValue = a[ordenacaoRentabilidade.campo];
+      let bValue = b[ordenacaoRentabilidade.campo];
+
+      // Tratamento especial para campos numéricos
+      if (typeof aValue === 'number' && typeof bValue === 'number') {
+        if (ordenacaoRentabilidade.direcao === 'asc') {
+          return aValue - bValue;
+        } else {
+          return bValue - aValue;
+        }
+      }
+
+      // Tratamento para strings
+      aValue = aValue?.toString().toLowerCase() || '';
+      bValue = bValue?.toString().toLowerCase() || '';
+
+      if (ordenacaoRentabilidade.direcao === 'asc') {
+        return aValue.localeCompare(bValue);
+      } else {
+        return bValue.localeCompare(aValue);
+      }
+    });
+
+    return dadosFiltrados;
+  };
+
+  const handleOrdenacaoRentabilidade = (campo: string) => {
+    if (ordenacaoRentabilidade.campo === campo) {
+      setOrdenacaoRentabilidade(prev => ({
+        ...prev,
+        direcao: prev.direcao === 'asc' ? 'desc' : 'asc'
+      }));
+    } else {
+      setOrdenacaoRentabilidade({
+        campo,
+        direcao: 'asc'
+      });
+    }
+  };
+
+  const limparFiltrosRentabilidade = () => {
+    setFiltroRentabilidade({
+      categoria: '',
+      busca: '',
+      rentabilidadeMin: '',
+      rentabilidadeMax: '',
+      quantidadeMin: '',
+      quantidadeMax: '',
+      valorMin: '',
+      valorMax: '',
+      percentualMin: '',
+      percentualMax: ''
+    });
+  };
+
+  const getIconeOrdenacao = (campo: string) => {
+    if (ordenacaoRentabilidade.campo !== campo) {
+      return <ChevronUp className="h-4 w-4 text-gray-400" />;
+    }
+    return ordenacaoRentabilidade.direcao === 'asc' 
+      ? <ChevronUp className="h-4 w-4 text-blue-600" />
+      : <ChevronDown className="h-4 w-4 text-blue-600" />;
+  };
+
+  // Funções para processar dados de Pareto
+  const processarDadosPareto = () => {
+    if (dadosProdutos.length === 0) return [];
+
+    // Calcular Pareto
+    const total = dadosProdutos.reduce((sum, p) => sum + p.valor, 0);
+    let acumulado = 0;
+    let atingiu80 = false;
+    
+    const produtosComPareto = dadosProdutos.map((p, idx) => {
+      const percentual = total > 0 ? (p.valor / total) * 100 : 0;
+      acumulado += percentual;
+      const isPareto = !atingiu80 && acumulado <= 80;
+      if (acumulado >= 80) atingiu80 = true;
+      
+      return {
+        ...p,
+        percentual,
+        isPareto
+      };
+    });
+
+    // Aplicar filtros
+    let dadosFiltrados = produtosComPareto.filter(produto => {
+      // Filtro por busca
+      if (filtroPareto.busca) {
+        const busca = filtroPareto.busca.toLowerCase();
+        const matchCodigo = produto.codigo.toLowerCase().includes(busca);
+        const matchDescricao = produto.descricao.toLowerCase().includes(busca);
+        if (!matchCodigo && !matchDescricao) return false;
+      }
+
+      // Filtro por Pareto
+      if (filtroPareto.pareto) {
+        if (filtroPareto.pareto === 'sim' && !produto.isPareto) return false;
+        if (filtroPareto.pareto === 'nao' && produto.isPareto) return false;
+      }
+
+      // Filtro por quantidade
+      if (filtroPareto.quantidadeMin && produto.quantidade < parseFloat(filtroPareto.quantidadeMin)) {
+        return false;
+      }
+      if (filtroPareto.quantidadeMax && produto.quantidade > parseFloat(filtroPareto.quantidadeMax)) {
+        return false;
+      }
+
+      // Filtro por valor
+      if (filtroPareto.valorMin && produto.valor < parseFloat(filtroPareto.valorMin)) {
+        return false;
+      }
+      if (filtroPareto.valorMax && produto.valor > parseFloat(filtroPareto.valorMax)) {
+        return false;
+      }
+
+      // Filtro por percentual
+      if (filtroPareto.percentualMin && produto.percentual < parseFloat(filtroPareto.percentualMin)) {
+        return false;
+      }
+      if (filtroPareto.percentualMax && produto.percentual > parseFloat(filtroPareto.percentualMax)) {
+        return false;
+      }
+
+      return true;
+    });
+
+    // Aplicar ordenação
+    dadosFiltrados.sort((a, b) => {
+      let aValue = a[ordenacaoPareto.campo];
+      let bValue = b[ordenacaoPareto.campo];
+
+      // Tratamento especial para campos numéricos
+      if (typeof aValue === 'number' && typeof bValue === 'number') {
+        if (ordenacaoPareto.direcao === 'asc') {
+          return aValue - bValue;
+        } else {
+          return bValue - aValue;
+        }
+      }
+
+      // Tratamento para strings
+      aValue = aValue?.toString().toLowerCase() || '';
+      bValue = bValue?.toString().toLowerCase() || '';
+
+      if (ordenacaoPareto.direcao === 'asc') {
+        return aValue.localeCompare(bValue);
+      } else {
+        return bValue.localeCompare(aValue);
+      }
+    });
+
+    return dadosFiltrados;
+  };
+
+  const handleOrdenacaoPareto = (campo: string) => {
+    if (ordenacaoPareto.campo === campo) {
+      setOrdenacaoPareto(prev => ({
+        ...prev,
+        direcao: prev.direcao === 'asc' ? 'desc' : 'asc'
+      }));
+    } else {
+      setOrdenacaoPareto({
+        campo,
+        direcao: 'asc'
+      });
+    }
+  };
+
+  const limparFiltrosPareto = () => {
+    setFiltroPareto({
+      busca: '',
+      pareto: '',
+      quantidadeMin: '',
+      quantidadeMax: '',
+      valorMin: '',
+      valorMax: '',
+      percentualMin: '',
+      percentualMax: ''
+    });
+  };
+
+  const getIconeOrdenacaoPareto = (campo: string) => {
+    if (ordenacaoPareto.campo !== campo) {
+      return <ChevronUp className="h-4 w-4 text-gray-400" />;
+    }
+    return ordenacaoPareto.direcao === 'asc' 
+      ? <ChevronUp className="h-4 w-4 text-blue-600" />
+      : <ChevronDown className="h-4 w-4 text-blue-600" />;
+  };
+
+  // Funções para processar dados de Pareto por quantidade
+  const processarDadosParetoQuantidade = () => {
+    if (dadosProdutos.length === 0) return [];
+
+    // Ordenar por quantidade para análise de Pareto
+    const produtosPorQuantidade = [...dadosProdutos].sort((a, b) => b.quantidade - a.quantidade);
+    
+    // Calcular Pareto por quantidade
+    const totalQuantidade = produtosPorQuantidade.reduce((sum, p) => sum + p.quantidade, 0);
+    let acumulado = 0;
+    let atingiu80 = false;
+    
+    const produtosComPareto = produtosPorQuantidade.map((p, idx) => {
+      const percentual = totalQuantidade > 0 ? (p.quantidade / totalQuantidade) * 100 : 0;
+      acumulado += percentual;
+      const isPareto = !atingiu80 && acumulado <= 80;
+      if (acumulado >= 80) atingiu80 = true;
+      
+      return {
+        ...p,
+        percentual,
+        isPareto
+      };
+    });
+
+    // Aplicar filtros
+    let dadosFiltrados = produtosComPareto.filter(produto => {
+      // Filtro por busca
+      if (filtroParetoQuantidade.busca) {
+        const busca = filtroParetoQuantidade.busca.toLowerCase();
+        const matchCodigo = produto.codigo.toLowerCase().includes(busca);
+        const matchDescricao = produto.descricao.toLowerCase().includes(busca);
+        if (!matchCodigo && !matchDescricao) return false;
+      }
+
+      // Filtro por Pareto
+      if (filtroParetoQuantidade.pareto) {
+        if (filtroParetoQuantidade.pareto === 'sim' && !produto.isPareto) return false;
+        if (filtroParetoQuantidade.pareto === 'nao' && produto.isPareto) return false;
+      }
+
+      // Filtro por quantidade
+      if (filtroParetoQuantidade.quantidadeMin && produto.quantidade < parseFloat(filtroParetoQuantidade.quantidadeMin)) {
+        return false;
+      }
+      if (filtroParetoQuantidade.quantidadeMax && produto.quantidade > parseFloat(filtroParetoQuantidade.quantidadeMax)) {
+        return false;
+      }
+
+      // Filtro por valor
+      if (filtroParetoQuantidade.valorMin && produto.valor < parseFloat(filtroParetoQuantidade.valorMin)) {
+        return false;
+      }
+      if (filtroParetoQuantidade.valorMax && produto.valor > parseFloat(filtroParetoQuantidade.valorMax)) {
+        return false;
+      }
+
+      // Filtro por percentual
+      if (filtroParetoQuantidade.percentualMin && produto.percentual < parseFloat(filtroParetoQuantidade.percentualMin)) {
+        return false;
+      }
+      if (filtroParetoQuantidade.percentualMax && produto.percentual > parseFloat(filtroParetoQuantidade.percentualMax)) {
+        return false;
+      }
+
+      return true;
+    });
+
+    // Aplicar ordenação
+    dadosFiltrados.sort((a, b) => {
+      let aValue = a[ordenacaoParetoQuantidade.campo];
+      let bValue = b[ordenacaoParetoQuantidade.campo];
+
+      // Tratamento especial para campos numéricos
+      if (typeof aValue === 'number' && typeof bValue === 'number') {
+        if (ordenacaoParetoQuantidade.direcao === 'asc') {
+          return aValue - bValue;
+        } else {
+          return bValue - aValue;
+        }
+      }
+
+      // Tratamento para strings
+      aValue = aValue?.toString().toLowerCase() || '';
+      bValue = bValue?.toString().toLowerCase() || '';
+
+      if (ordenacaoParetoQuantidade.direcao === 'asc') {
+        return aValue.localeCompare(bValue);
+      } else {
+        return bValue.localeCompare(aValue);
+      }
+    });
+
+    return dadosFiltrados;
+  };
+
+  const handleOrdenacaoParetoQuantidade = (campo: string) => {
+    if (ordenacaoParetoQuantidade.campo === campo) {
+      setOrdenacaoParetoQuantidade(prev => ({
+        ...prev,
+        direcao: prev.direcao === 'asc' ? 'desc' : 'asc'
+      }));
+    } else {
+      setOrdenacaoParetoQuantidade({
+        campo,
+        direcao: 'asc'
+      });
+    }
+  };
+
+  const limparFiltrosParetoQuantidade = () => {
+    setFiltroParetoQuantidade({
+      busca: '',
+      pareto: '',
+      quantidadeMin: '',
+      quantidadeMax: '',
+      valorMin: '',
+      valorMax: '',
+      percentualMin: '',
+      percentualMax: ''
+    });
+  };
+
+  const getIconeOrdenacaoParetoQuantidade = (campo: string) => {
+    if (ordenacaoParetoQuantidade.campo !== campo) {
+      return <ChevronUp className="h-4 w-4 text-gray-400" />;
+    }
+    return ordenacaoParetoQuantidade.direcao === 'asc' 
+      ? <ChevronUp className="h-4 w-4 text-blue-600" />
+      : <ChevronDown className="h-4 w-4 text-blue-600" />;
   };
 
   return (
@@ -735,7 +1543,16 @@ export default function NotaFiscal() {
         </Card>
       </div>
 
-      {/* Lista de Notas Fiscais */}
+      {/* Abas de Conteúdo */}
+      <Tabs defaultValue="lista" className="space-y-4">
+        <TabsList className="grid w-full grid-cols-2">
+          <TabsTrigger value="lista">Lista de Notas Fiscais</TabsTrigger>
+          <TabsTrigger value="relatorios">Relatórios</TabsTrigger>
+        </TabsList>
+
+        {/* Aba: Lista de Notas Fiscais */}
+        <TabsContent value="lista" className="space-y-4">
+          {/* Lista de Notas Fiscais */}
       <Card>
         <CardHeader>
           <CardTitle>Controle de Notas Fiscais</CardTitle>
@@ -771,9 +1588,12 @@ export default function NotaFiscal() {
                 </SelectContent>
               </Select>
             </div>
-            <Button variant="outline">
+            <Button 
+              variant={hasActiveFilters() ? "default" : "outline"}
+              onClick={() => setIsFilterDialogOpen(true)}
+            >
               <Filter className="mr-2 h-4 w-4" />
-              Filtros
+              Filtros {hasActiveFilters() && <Badge variant="secondary" className="ml-2">Ativo</Badge>}
             </Button>
             <Button variant="outline">
               <Download className="mr-2 h-4 w-4" />
@@ -879,7 +1699,12 @@ export default function NotaFiscal() {
           {!loading && notasFiscais.length > 0 && (
             <div className="flex items-center justify-between mt-4">
               <div className="text-sm text-muted-foreground">
-                Mostrando {((currentPage - 1) * itemsPerPage) + 1} a {Math.min(currentPage * itemsPerPage, notasFiscais.length)} de {notasFiscais.length} notas fiscais
+                Mostrando {((currentPage - 1) * itemsPerPage) + 1} a {Math.min(currentPage * itemsPerPage, applyFilters(notasFiscais).length)} de {applyFilters(notasFiscais).length} notas fiscais
+                {hasActiveFilters() && (
+                  <span className="ml-2 text-blue-600">
+                    (filtrado de {notasFiscais.length} total)
+                  </span>
+                )}
               </div>
               <div className="flex items-center space-x-2">
                 <Button
@@ -890,18 +1715,10 @@ export default function NotaFiscal() {
                 >
                   Anterior
                 </Button>
-                <div className="flex items-center space-x-1">
-                  {Array.from({ length: getTotalPages() }, (_, i) => i + 1).map((page) => (
-                    <Button
-                      key={page}
-                      variant={currentPage === page ? "default" : "outline"}
-                      size="sm"
-                      onClick={() => setCurrentPage(page)}
-                      className="w-8 h-8 p-0"
-                    >
-                      {page}
-                    </Button>
-                  ))}
+                <div className="flex items-center space-x-2">
+                  <span className="text-sm text-muted-foreground">
+                    Página {currentPage} de {getTotalPages()}
+                  </span>
                 </div>
                 <Button
                   variant="outline"
@@ -909,13 +1726,1249 @@ export default function NotaFiscal() {
                   onClick={() => setCurrentPage(currentPage + 1)}
                   disabled={currentPage === getTotalPages()}
                 >
-                  Próxima
+                  Próximo
                 </Button>
               </div>
             </div>
           )}
         </CardContent>
       </Card>
+        </TabsContent>
+
+        {/* Aba: Relatórios */}
+        <TabsContent value="relatorios" className="space-y-4">
+          {/* Controles de Relatório */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Relatórios de Notas Fiscais</CardTitle>
+              <CardDescription>Análises gráficas e insights de vendas</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center justify-between mb-6">
+                <Select value={periodoRelatorio} onValueChange={setPeriodoRelatorio}>
+                  <SelectTrigger className="w-48">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ultima_semana">Última Semana</SelectItem>
+                    <SelectItem value="ultimo_mes">Último Mês</SelectItem>
+                    <SelectItem value="ultimos_3_meses">Últimos 3 Meses</SelectItem>
+                    <SelectItem value="ultimo_ano">Último Ano</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Button variant="outline">
+                  <Download className="mr-2 h-4 w-4" />
+                  Exportar
+                </Button>
+              </div>
+
+              {/* Cards de Resumo */}
+              <div className="grid gap-6 md:grid-cols-4 mb-6">
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Total de Notas</CardTitle>
+                    <BarChart3 className="h-4 w-4 text-muted-foreground" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold">{notasFiscais.length}</div>
+                    <p className="text-xs text-muted-foreground">Período selecionado</p>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Valor Total</CardTitle>
+                    <DollarSign className="h-4 w-4 text-success" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold text-success">
+                      R$ {notasFiscais.reduce((sum, nota) => sum + parseFloat(nota.valor_total || 0), 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                    </div>
+                    <p className="text-xs text-muted-foreground">Faturamento total</p>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Ticket Médio</CardTitle>
+                    <TrendingUp className="h-4 w-4 text-primary" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold text-primary">
+                      R$ {notasFiscais.length > 0 ? (notasFiscais.reduce((sum, nota) => sum + parseFloat(nota.valor_total || 0), 0) / notasFiscais.length).toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : '0,00'}
+                    </div>
+                    <p className="text-xs text-muted-foreground">Por nota fiscal</p>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Regiões Atendidas</CardTitle>
+                    <MapPin className="h-4 w-4 text-warning" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold text-warning">
+                      {new Set(notasFiscais.map(nota => nota.destinatario_endereco?.estado).filter(Boolean)).size}
+                    </div>
+                    <p className="text-xs text-muted-foreground">Estados diferentes</p>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Gráficos */}
+                              <Tabs defaultValue="produtos" className="space-y-4">
+                                                    <TabsList className="grid w-full grid-cols-3 md:grid-cols-5">
+                    <TabsTrigger value="produtos">Por Produtos</TabsTrigger>
+                  <TabsTrigger value="produtos_qtd">Por Qtd. Produtos</TabsTrigger>
+                                              <TabsTrigger value="rentabilidade">Curva ABC</TabsTrigger>
+                                              <TabsTrigger value="temporal">Evolução Temporal</TabsTrigger>
+                  <TabsTrigger value="valor">Por Valor</TabsTrigger>
+                </TabsList>
+
+
+
+                {/* Relatório por Produtos */}
+                <TabsContent value="produtos" className="space-y-4">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Faturamento por Produto</CardTitle>
+                      <CardDescription>Top produtos por valor faturado</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      {dadosProdutos.length === 0 ? (
+                        <div className="flex items-center justify-center h-64">
+                          <p className="text-muted-foreground">Nenhum dado de produto disponível</p>
+                        </div>
+                      ) : (
+                        <ResponsiveContainer width="100%" height={400}>
+                          <BarChart data={dadosProdutos}>
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis 
+                            dataKey="descricao" 
+                            tickFormatter={(value) => {
+                              if (!value) return 'Sem descrição';
+                              return value.length > 30 ? value.substring(0, 30) + '...' : value;
+                            }}
+                            angle={-30}
+                            textAnchor="end"
+                            height={90}
+                            interval={0}
+                            tick={{ fontSize: 11 }}
+                            dy={10}
+                          />
+                          <YAxis />
+                          <Tooltip 
+                            formatter={(value) => `R$ ${value.toLocaleString('pt-BR')}`}
+                            labelFormatter={(label) => {
+                              const produto = dadosProdutos.find(p => p.descricao === label);
+                              return produto ? produto.descricao : label;
+                            }}
+                          />
+                          <Legend />
+                          <Bar dataKey="valor" fill="#00C49F" name="Valor Faturado" />
+                        </BarChart>
+                      </ResponsiveContainer>
+                      )}
+                    </CardContent>
+                  </Card>
+
+                  {/* Tabela detalhada de Pareto */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Detalhamento por Produto (Pareto 80/20)</CardTitle>
+                      <CardDescription>Análise dos produtos que representam 80% do faturamento</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      {/* Filtros */}
+                      <div className="mb-6 space-y-4">
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                          {/* Busca */}
+                          <div className="space-y-2">
+                            <Label htmlFor="busca-pareto">Buscar</Label>
+                            <Input
+                              id="busca-pareto"
+                              placeholder="Código ou descrição..."
+                              value={filtroPareto.busca}
+                              onChange={(e) => setFiltroPareto(prev => ({ ...prev, busca: e.target.value }))}
+                            />
+                          </div>
+
+                          {/* Pareto */}
+                          <div className="space-y-2">
+                            <Label htmlFor="pareto-filter">Pareto</Label>
+                            <Select value={filtroPareto.pareto} onValueChange={(value) => setFiltroPareto(prev => ({ ...prev, pareto: value }))}>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Todos" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="">Todos</SelectItem>
+                                <SelectItem value="sim">Produtos Pareto (80%)</SelectItem>
+                                <SelectItem value="nao">Produtos não Pareto (20%)</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+
+                          {/* Faixa de Quantidade */}
+                          <div className="space-y-2">
+                            <Label>Quantidade</Label>
+                            <div className="flex gap-2">
+                              <Input
+                                placeholder="Mín"
+                                type="number"
+                                value={filtroPareto.quantidadeMin}
+                                onChange={(e) => setFiltroPareto(prev => ({ ...prev, quantidadeMin: e.target.value }))}
+                              />
+                              <Input
+                                placeholder="Máx"
+                                type="number"
+                                value={filtroPareto.quantidadeMax}
+                                onChange={(e) => setFiltroPareto(prev => ({ ...prev, quantidadeMax: e.target.value }))}
+                              />
+                            </div>
+                          </div>
+
+                          {/* Faixa de Valor */}
+                          <div className="space-y-2">
+                            <Label>Valor Total (R$)</Label>
+                            <div className="flex gap-2">
+                              <Input
+                                placeholder="Mín"
+                                type="number"
+                                step="0.01"
+                                value={filtroPareto.valorMin}
+                                onChange={(e) => setFiltroPareto(prev => ({ ...prev, valorMin: e.target.value }))}
+                              />
+                              <Input
+                                placeholder="Máx"
+                                type="number"
+                                step="0.01"
+                                value={filtroPareto.valorMax}
+                                onChange={(e) => setFiltroPareto(prev => ({ ...prev, valorMax: e.target.value }))}
+                              />
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Filtros adicionais */}
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                          {/* Faixa de Percentual */}
+                          <div className="space-y-2">
+                            <Label>% Faturamento</Label>
+                            <div className="flex gap-2">
+                              <Input
+                                placeholder="Mín %"
+                                type="number"
+                                step="0.01"
+                                value={filtroPareto.percentualMin}
+                                onChange={(e) => setFiltroPareto(prev => ({ ...prev, percentualMin: e.target.value }))}
+                              />
+                              <Input
+                                placeholder="Máx %"
+                                type="number"
+                                step="0.01"
+                                value={filtroPareto.percentualMax}
+                                onChange={(e) => setFiltroPareto(prev => ({ ...prev, percentualMax: e.target.value }))}
+                              />
+                            </div>
+                          </div>
+
+                          {/* Estatísticas */}
+                          <div className="space-y-2">
+                            <Label>Resultados</Label>
+                            <div className="text-sm text-muted-foreground">
+                              {(() => {
+                                const dadosProcessados = processarDadosPareto();
+                                const total = dadosProdutos.length;
+                                const filtrados = dadosProcessados.length;
+                                return `${filtrados} de ${total} produtos`;
+                              })()}
+                            </div>
+                          </div>
+
+                          {/* Botão Limpar */}
+                          <div className="space-y-2">
+                            <Label>&nbsp;</Label>
+                            <Button 
+                              variant="outline" 
+                              onClick={limparFiltrosPareto}
+                              className="w-full"
+                            >
+                              <X className="mr-2 h-4 w-4" />
+                              Limpar Filtros
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="overflow-x-auto">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead 
+                                className="cursor-pointer hover:bg-gray-50"
+                                onClick={() => handleOrdenacaoPareto('codigo')}
+                              >
+                                <div className="flex items-center space-x-1">
+                                  <span>Código</span>
+                                  {getIconeOrdenacaoPareto('codigo')}
+                                </div>
+                              </TableHead>
+                              <TableHead 
+                                className="cursor-pointer hover:bg-gray-50"
+                                onClick={() => handleOrdenacaoPareto('descricao')}
+                              >
+                                <div className="flex items-center space-x-1">
+                                  <span>Descrição</span>
+                                  {getIconeOrdenacaoPareto('descricao')}
+                                </div>
+                              </TableHead>
+                              <TableHead 
+                                className="cursor-pointer hover:bg-gray-50 text-right"
+                                onClick={() => handleOrdenacaoPareto('quantidade')}
+                              >
+                                <div className="flex items-center justify-end space-x-1">
+                                  <span>Qtd. Total</span>
+                                  {getIconeOrdenacaoPareto('quantidade')}
+                                </div>
+                              </TableHead>
+                              <TableHead 
+                                className="cursor-pointer hover:bg-gray-50 text-right"
+                                onClick={() => handleOrdenacaoPareto('valor_unitario_medio')}
+                              >
+                                <div className="flex items-center justify-end space-x-1">
+                                  <span>Valor Unit. Médio</span>
+                                  {getIconeOrdenacaoPareto('valor_unitario_medio')}
+                                </div>
+                              </TableHead>
+                              <TableHead 
+                                className="cursor-pointer hover:bg-gray-50 text-right"
+                                onClick={() => handleOrdenacaoPareto('valor')}
+                              >
+                                <div className="flex items-center justify-end space-x-1">
+                                  <span>Valor Total</span>
+                                  {getIconeOrdenacaoPareto('valor')}
+                                </div>
+                              </TableHead>
+                              <TableHead 
+                                className="cursor-pointer hover:bg-gray-50 text-right"
+                                onClick={() => handleOrdenacaoPareto('percentual')}
+                              >
+                                <div className="flex items-center justify-end space-x-1">
+                                  <span>% do Faturamento</span>
+                                  {getIconeOrdenacaoPareto('percentual')}
+                                </div>
+                              </TableHead>
+                              <TableHead 
+                                className="cursor-pointer hover:bg-gray-50 text-center"
+                                onClick={() => handleOrdenacaoPareto('isPareto')}
+                              >
+                                <div className="flex items-center justify-center space-x-1">
+                                  <span>Pareto</span>
+                                  {getIconeOrdenacaoPareto('isPareto')}
+                                </div>
+                              </TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {(() => {
+                              const dadosProcessados = processarDadosPareto();
+                              
+                              if (dadosProcessados.length === 0) {
+                                return (
+                                  <TableRow>
+                                    <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                                      Nenhum produto encontrado com os filtros aplicados
+                                    </TableCell>
+                                  </TableRow>
+                                );
+                              }
+
+                              return dadosProcessados.map((p) => {
+                                // Limitar descrição a 150 caracteres
+                                const descricaoLimitada = p.descricao && p.descricao.length > 150 
+                                  ? p.descricao.substring(0, 150) + '...' 
+                                  : p.descricao;
+                                
+                                return (
+                                  <TableRow key={p.codigo} className={p.isPareto ? 'bg-green-50 font-semibold' : ''}>
+                                    <TableCell className="font-medium">{p.codigo}</TableCell>
+                                    <TableCell>
+                                      <div 
+                                        className="max-w-xs truncate"
+                                        title={p.descricao && p.descricao.length > 150 ? p.descricao : undefined}
+                                      >
+                                        {descricaoLimitada || 'Sem descrição'}
+                                      </div>
+                                    </TableCell>
+                                    <TableCell className="text-right">{p.quantidade.toLocaleString('pt-BR')}</TableCell>
+                                    <TableCell className="text-right">R$ {p.valor_unitario_medio.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</TableCell>
+                                    <TableCell className="text-right">R$ {p.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</TableCell>
+                                    <TableCell className="text-right">{p.percentual.toFixed(2)}%</TableCell>
+                                    <TableCell className="text-center">
+                                      {p.isPareto ? (
+                                        <Badge variant="default" className="bg-green-600">Sim</Badge>
+                                      ) : (
+                                        <Badge variant="secondary">Não</Badge>
+                                      )}
+                                    </TableCell>
+                                  </TableRow>
+                                );
+                              });
+                            })()}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </TabsContent>
+
+                {/* Relatório por Quantidade de Produtos */}
+                <TabsContent value="produtos_qtd" className="space-y-4">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Quantidade por Produto</CardTitle>
+                      <CardDescription>Top produtos por quantidade vendida</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      {dadosProdutos.length === 0 ? (
+                        <div className="flex items-center justify-center h-64">
+                          <p className="text-muted-foreground">Nenhum dado de produto disponível</p>
+                        </div>
+                      ) : (
+                        <ResponsiveContainer width="100%" height={400}>
+                          <BarChart data={dadosProdutos}>
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis 
+                            dataKey="descricao" 
+                            tickFormatter={(value) => {
+                              if (!value) return 'Sem descrição';
+                              return value.length > 30 ? value.substring(0, 30) + '...' : value;
+                            }}
+                            angle={-30}
+                            textAnchor="end"
+                            height={90}
+                            interval={0}
+                            tick={{ fontSize: 11 }}
+                            dy={10}
+                          />
+                          <YAxis />
+                          <Tooltip 
+                            formatter={(value) => `${value.toLocaleString('pt-BR')} unidades`}
+                            labelFormatter={(label) => {
+                              const produto = dadosProdutos.find(p => p.descricao === label);
+                              return produto ? produto.descricao : label;
+                            }}
+                          />
+                          <Legend />
+                          <Bar dataKey="quantidade" fill="#FF6B6B" name="Quantidade Vendida" />
+                        </BarChart>
+                      </ResponsiveContainer>
+                      )}
+                    </CardContent>
+                  </Card>
+
+                  {/* Tabela detalhada de Pareto por quantidade */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Detalhamento por Quantidade (Pareto 80/20)</CardTitle>
+                      <CardDescription>Análise dos produtos que representam 80% da quantidade vendida</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      {/* Filtros */}
+                      <div className="mb-6 space-y-4">
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                          {/* Busca */}
+                          <div className="space-y-2">
+                            <Label htmlFor="busca-pareto-qtd">Buscar</Label>
+                            <Input
+                              id="busca-pareto-qtd"
+                              placeholder="Código ou descrição..."
+                              value={filtroParetoQuantidade.busca}
+                              onChange={(e) => setFiltroParetoQuantidade(prev => ({ ...prev, busca: e.target.value }))}
+                            />
+                          </div>
+
+                          {/* Pareto */}
+                          <div className="space-y-2">
+                            <Label htmlFor="pareto-qtd-filter">Pareto</Label>
+                            <Select value={filtroParetoQuantidade.pareto} onValueChange={(value) => setFiltroParetoQuantidade(prev => ({ ...prev, pareto: value }))}>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Todos" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="">Todos</SelectItem>
+                                <SelectItem value="sim">Produtos Pareto (80%)</SelectItem>
+                                <SelectItem value="nao">Produtos não Pareto (20%)</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+
+                          {/* Faixa de Quantidade */}
+                          <div className="space-y-2">
+                            <Label>Quantidade</Label>
+                            <div className="flex gap-2">
+                              <Input
+                                placeholder="Mín"
+                                type="number"
+                                value={filtroParetoQuantidade.quantidadeMin}
+                                onChange={(e) => setFiltroParetoQuantidade(prev => ({ ...prev, quantidadeMin: e.target.value }))}
+                              />
+                              <Input
+                                placeholder="Máx"
+                                type="number"
+                                value={filtroParetoQuantidade.quantidadeMax}
+                                onChange={(e) => setFiltroParetoQuantidade(prev => ({ ...prev, quantidadeMax: e.target.value }))}
+                              />
+                            </div>
+                          </div>
+
+                          {/* Faixa de Valor */}
+                          <div className="space-y-2">
+                            <Label>Valor Total (R$)</Label>
+                            <div className="flex gap-2">
+                              <Input
+                                placeholder="Mín"
+                                type="number"
+                                step="0.01"
+                                value={filtroParetoQuantidade.valorMin}
+                                onChange={(e) => setFiltroParetoQuantidade(prev => ({ ...prev, valorMin: e.target.value }))}
+                              />
+                              <Input
+                                placeholder="Máx"
+                                type="number"
+                                step="0.01"
+                                value={filtroParetoQuantidade.valorMax}
+                                onChange={(e) => setFiltroParetoQuantidade(prev => ({ ...prev, valorMax: e.target.value }))}
+                              />
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Filtros adicionais */}
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                          {/* Faixa de Percentual */}
+                          <div className="space-y-2">
+                            <Label>% Quantidade</Label>
+                            <div className="flex gap-2">
+                              <Input
+                                placeholder="Mín %"
+                                type="number"
+                                step="0.01"
+                                value={filtroParetoQuantidade.percentualMin}
+                                onChange={(e) => setFiltroParetoQuantidade(prev => ({ ...prev, percentualMin: e.target.value }))}
+                              />
+                              <Input
+                                placeholder="Máx %"
+                                type="number"
+                                step="0.01"
+                                value={filtroParetoQuantidade.percentualMax}
+                                onChange={(e) => setFiltroParetoQuantidade(prev => ({ ...prev, percentualMax: e.target.value }))}
+                              />
+                            </div>
+                          </div>
+
+                          {/* Estatísticas */}
+                          <div className="space-y-2">
+                            <Label>Resultados</Label>
+                            <div className="text-sm text-muted-foreground">
+                              {(() => {
+                                const dadosProcessados = processarDadosParetoQuantidade();
+                                const total = dadosProdutos.length;
+                                const filtrados = dadosProcessados.length;
+                                return `${filtrados} de ${total} produtos`;
+                              })()}
+                            </div>
+                          </div>
+
+                          {/* Botão Limpar */}
+                          <div className="space-y-2">
+                            <Label>&nbsp;</Label>
+                            <Button 
+                              variant="outline" 
+                              onClick={limparFiltrosParetoQuantidade}
+                              className="w-full"
+                            >
+                              <X className="mr-2 h-4 w-4" />
+                              Limpar Filtros
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="overflow-x-auto">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead 
+                                className="cursor-pointer hover:bg-gray-50"
+                                onClick={() => handleOrdenacaoParetoQuantidade('codigo')}
+                              >
+                                <div className="flex items-center space-x-1">
+                                  <span>Código</span>
+                                  {getIconeOrdenacaoParetoQuantidade('codigo')}
+                                </div>
+                              </TableHead>
+                              <TableHead 
+                                className="cursor-pointer hover:bg-gray-50"
+                                onClick={() => handleOrdenacaoParetoQuantidade('descricao')}
+                              >
+                                <div className="flex items-center space-x-1">
+                                  <span>Descrição</span>
+                                  {getIconeOrdenacaoParetoQuantidade('descricao')}
+                                </div>
+                              </TableHead>
+                              <TableHead 
+                                className="cursor-pointer hover:bg-gray-50 text-right"
+                                onClick={() => handleOrdenacaoParetoQuantidade('quantidade')}
+                              >
+                                <div className="flex items-center justify-end space-x-1">
+                                  <span>Qtd. Total</span>
+                                  {getIconeOrdenacaoParetoQuantidade('quantidade')}
+                                </div>
+                              </TableHead>
+                              <TableHead 
+                                className="cursor-pointer hover:bg-gray-50 text-right"
+                                onClick={() => handleOrdenacaoParetoQuantidade('valor_unitario_medio')}
+                              >
+                                <div className="flex items-center justify-end space-x-1">
+                                  <span>Valor Unit. Médio</span>
+                                  {getIconeOrdenacaoParetoQuantidade('valor_unitario_medio')}
+                                </div>
+                              </TableHead>
+                              <TableHead 
+                                className="cursor-pointer hover:bg-gray-50 text-right"
+                                onClick={() => handleOrdenacaoParetoQuantidade('valor')}
+                              >
+                                <div className="flex items-center justify-end space-x-1">
+                                  <span>Valor Total</span>
+                                  {getIconeOrdenacaoParetoQuantidade('valor')}
+                                </div>
+                              </TableHead>
+                              <TableHead 
+                                className="cursor-pointer hover:bg-gray-50 text-right"
+                                onClick={() => handleOrdenacaoParetoQuantidade('percentual')}
+                              >
+                                <div className="flex items-center justify-end space-x-1">
+                                  <span>% da Quantidade</span>
+                                  {getIconeOrdenacaoParetoQuantidade('percentual')}
+                                </div>
+                              </TableHead>
+                              <TableHead 
+                                className="cursor-pointer hover:bg-gray-50 text-center"
+                                onClick={() => handleOrdenacaoParetoQuantidade('isPareto')}
+                              >
+                                <div className="flex items-center justify-center space-x-1">
+                                  <span>Pareto</span>
+                                  {getIconeOrdenacaoParetoQuantidade('isPareto')}
+                                </div>
+                              </TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {(() => {
+                              const dadosProcessados = processarDadosParetoQuantidade();
+                              
+                              if (dadosProcessados.length === 0) {
+                                return (
+                                  <TableRow>
+                                    <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                                      Nenhum produto encontrado com os filtros aplicados
+                                    </TableCell>
+                                  </TableRow>
+                                );
+                              }
+
+                              return dadosProcessados.map((p) => {
+                                // Limitar descrição a 150 caracteres
+                                const descricaoLimitada = p.descricao && p.descricao.length > 150 
+                                  ? p.descricao.substring(0, 150) + '...' 
+                                  : p.descricao;
+                                
+                                return (
+                                  <TableRow key={p.codigo} className={p.isPareto ? 'bg-blue-50 font-semibold' : ''}>
+                                    <TableCell className="font-medium">{p.codigo}</TableCell>
+                                    <TableCell>
+                                      <div 
+                                        className="max-w-xs truncate"
+                                        title={p.descricao && p.descricao.length > 150 ? p.descricao : undefined}
+                                      >
+                                        {descricaoLimitada || 'Sem descrição'}
+                                      </div>
+                                    </TableCell>
+                                    <TableCell className="text-right">{p.quantidade.toLocaleString('pt-BR')}</TableCell>
+                                    <TableCell className="text-right">R$ {p.valor_unitario_medio.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</TableCell>
+                                    <TableCell className="text-right">R$ {p.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</TableCell>
+                                    <TableCell className="text-right">{p.percentual.toFixed(2)}%</TableCell>
+                                    <TableCell className="text-center">
+                                      {p.isPareto ? (
+                                        <Badge variant="default" className="bg-blue-600">Sim</Badge>
+                                      ) : (
+                                        <Badge variant="secondary">Não</Badge>
+                                      )}
+                                    </TableCell>
+                                  </TableRow>
+                                );
+                              });
+                            })()}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Gráfico de pizza por quantidade */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Distribuição por Quantidade</CardTitle>
+                      <CardDescription>Proporção de quantidade vendida por produto</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <ResponsiveContainer width="100%" height={400}>
+                        <RechartsPieChart>
+                          <Pie
+                            data={dadosProdutos.slice(0, 10)} // Top 10 produtos
+                            cx="50%"
+                            cy="50%"
+                            labelLine={false}
+                            label={({ descricao, percent }) => {
+                              const nomeCurto = descricao && descricao.length > 20 
+                                ? descricao.substring(0, 20) + '...' 
+                                : descricao || 'Sem descrição';
+                              return `${nomeCurto} ${(percent * 100).toFixed(0)}%`;
+                            }}
+                            outerRadius={150}
+                            fill="#8884d8"
+                            dataKey="quantidade"
+                          >
+                            {dadosProdutos.slice(0, 10).map((entry, index) => (
+                              <Cell key={`cell-${index}`} fill={`hsl(${index * 36}, 70%, 60%)`} />
+                            ))}
+                          </Pie>
+                          <Tooltip 
+                            formatter={(value) => `${value.toLocaleString('pt-BR')} unidades`}
+                          />
+                        </RechartsPieChart>
+                      </ResponsiveContainer>
+                    </CardContent>
+                  </Card>
+                </TabsContent>
+
+                {/* Relatório de Rentabilidade */}
+                <TabsContent value="rentabilidade" className="space-y-4">
+                  {/* Análise Curva ABC */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Análise Curva ABC</CardTitle>
+                      <CardDescription>Classificação dos produtos por importância no faturamento total</CardDescription>
+                      <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
+                        <div className="flex items-center gap-2">
+                          <Badge variant="default" className="bg-green-600 text-white font-bold">A</Badge>
+                          <span>80% do faturamento - Produtos mais importantes</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Badge variant="default" className="bg-yellow-600 text-white font-bold">B</Badge>
+                          <span>15% do faturamento - Produtos de importância média</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Badge variant="destructive" className="bg-red-600 text-white">C</Badge>
+                          <span>5% do faturamento - Produtos menos importantes</span>
+                        </div>
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      {dadosProdutos.length === 0 ? (
+                        <div className="flex items-center justify-center h-64">
+                          <p className="text-muted-foreground">Nenhum dado de produto disponível</p>
+                        </div>
+                      ) : (
+                        <ResponsiveContainer width="100%" height={400}>
+                          <BarChart data={dadosProdutos.slice(0, 10)}>
+                            <CartesianGrid strokeDasharray="3 3" />
+                            <XAxis 
+                              dataKey="descricao" 
+                              tickFormatter={(value) => {
+                                if (!value) return 'Sem descrição';
+                                return value.length > 25 ? value.substring(0, 25) + '...' : value;
+                              }}
+                              angle={-30}
+                              textAnchor="end"
+                              height={90}
+                              interval={0}
+                              tick={{ fontSize: 10 }}
+                              dy={10}
+                            />
+                            <YAxis yAxisId="left" />
+                            <YAxis yAxisId="right" orientation="right" />
+                            <Tooltip 
+                              formatter={(value, name) => {
+                                if (name === 'quantidade') return [`${value.toLocaleString('pt-BR')} unidades`, 'Quantidade'];
+                                if (name === 'valor') return [`R$ ${value.toLocaleString('pt-BR')}`, 'Faturamento'];
+                                return [value, name];
+                              }}
+                            />
+                            <Legend />
+                            <Bar yAxisId="left" dataKey="quantidade" fill="#FF6B6B" name="Quantidade" />
+                            <Bar yAxisId="right" dataKey="valor" fill="#4ECDC4" name="Faturamento" />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      )}
+                    </CardContent>
+                  </Card>
+
+                  {/* Tabela de Análise Curva ABC */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Análise Detalhada - Curva ABC</CardTitle>
+                      <CardDescription>Classificação dos produtos por importância no faturamento total</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      {/* Filtros */}
+                      <div className="mb-6 space-y-4">
+                        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                          {/* Busca */}
+                          <div className="space-y-2">
+                            <Label htmlFor="busca-rentabilidade">Buscar</Label>
+                            <Input
+                              id="busca-rentabilidade"
+                              placeholder="Código ou descrição..."
+                              value={filtroRentabilidade.busca}
+                              onChange={(e) => setFiltroRentabilidade(prev => ({ ...prev, busca: e.target.value }))}
+                            />
+                          </div>
+
+                          {/* Categoria */}
+                          <div className="space-y-2">
+                            <Label htmlFor="categoria-rentabilidade">Categoria</Label>
+                            <Select value={filtroRentabilidade.categoria} onValueChange={(value) => setFiltroRentabilidade(prev => ({ ...prev, categoria: value }))}>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Todas as categorias" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="">Todas as categorias</SelectItem>
+                                <SelectItem value="A">Categoria A (80% do faturamento)</SelectItem>
+                                <SelectItem value="B">Categoria B (15% do faturamento)</SelectItem>
+                                <SelectItem value="C">Categoria C (5% do faturamento)</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+
+                          {/* Curva ABC */}
+                          <div className="space-y-2">
+                            <Label htmlFor="curva-abc-rentabilidade">Curva ABC</Label>
+                            <Select value={filtroRentabilidade.categoria} onValueChange={(value) => setFiltroRentabilidade(prev => ({ ...prev, categoria: value }))}>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Todas as curvas" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="">Todas as curvas</SelectItem>
+                                <SelectItem value="A">Curva A - Produtos Premium (80%)</SelectItem>
+                                <SelectItem value="B">Curva B - Produtos Estrela (15%)</SelectItem>
+                                <SelectItem value="C">Curva C - Produtos Volume (5%)</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+
+                          {/* Faixa de Rentabilidade */}
+                          <div className="space-y-2">
+                            <Label>Rentabilidade (R$)</Label>
+                            <div className="flex gap-2">
+                              <Input
+                                placeholder="Mín"
+                                type="number"
+                                step="0.01"
+                                value={filtroRentabilidade.rentabilidadeMin}
+                                onChange={(e) => setFiltroRentabilidade(prev => ({ ...prev, rentabilidadeMin: e.target.value }))}
+                              />
+                              <Input
+                                placeholder="Máx"
+                                type="number"
+                                step="0.01"
+                                value={filtroRentabilidade.rentabilidadeMax}
+                                onChange={(e) => setFiltroRentabilidade(prev => ({ ...prev, rentabilidadeMax: e.target.value }))}
+                              />
+                            </div>
+                          </div>
+
+                        </div>
+
+                        {/* Filtros adicionais */}
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                          {/* Botão Limpar */}
+                          <div className="space-y-2">
+                            <Label>&nbsp;</Label>
+                            <Button 
+                              variant="outline" 
+                              onClick={limparFiltrosRentabilidade}
+                              className="w-full"
+                            >
+                              <X className="mr-2 h-4 w-4" />
+                              Limpar Filtros
+                            </Button>
+                          </div>
+                          {/* Faixa de Quantidade */}
+                          <div className="space-y-2">
+                            <Label>Quantidade</Label>
+                            <div className="flex gap-2">
+                              <Input
+                                placeholder="Mín"
+                                type="number"
+                                step="0.01"
+                                value={filtroRentabilidade.quantidadeMin}
+                                onChange={(e) => setFiltroRentabilidade(prev => ({ ...prev, quantidadeMin: e.target.value }))}
+                              />
+                              <Input
+                                placeholder="Máx"
+                                type="number"
+                                step="0.01"
+                                value={filtroRentabilidade.quantidadeMax}
+                                onChange={(e) => setFiltroRentabilidade(prev => ({ ...prev, quantidadeMax: e.target.value }))}
+                              />
+                            </div>
+                          </div>
+
+                          {/* Faixa de Valor */}
+                          <div className="space-y-2">
+                            <Label>Faturamento (R$)</Label>
+                            <div className="flex gap-2">
+                              <Input
+                                placeholder="Mín"
+                                type="number"
+                                step="0.01"
+                                value={filtroRentabilidade.valorMin}
+                                onChange={(e) => setFiltroRentabilidade(prev => ({ ...prev, valorMin: e.target.value }))}
+                              />
+                              <Input
+                                placeholder="Máx"
+                                type="number"
+                                step="0.01"
+                                value={filtroRentabilidade.valorMax}
+                                onChange={(e) => setFiltroRentabilidade(prev => ({ ...prev, valorMax: e.target.value }))}
+                              />
+                            </div>
+                          </div>
+
+                          {/* Faixa de Percentual */}
+                          <div className="space-y-2">
+                            <Label>% Faturamento</Label>
+                            <div className="flex gap-2">
+                              <Input
+                                placeholder="Mín %"
+                                type="number"
+                                step="0.01"
+                                value={filtroRentabilidade.percentualMin}
+                                onChange={(e) => setFiltroRentabilidade(prev => ({ ...prev, percentualMin: e.target.value }))}
+                              />
+                              <Input
+                                placeholder="Máx %"
+                                type="number"
+                                step="0.01"
+                                value={filtroRentabilidade.percentualMax}
+                                onChange={(e) => setFiltroRentabilidade(prev => ({ ...prev, percentualMax: e.target.value }))}
+                              />
+                            </div>
+                          </div>
+
+                          {/* Estatísticas */}
+                          <div className="space-y-2">
+                            <Label>Resultados</Label>
+                            <div className="text-sm text-muted-foreground">
+                              {(() => {
+                                const dadosProcessados = processarDadosRentabilidade();
+                                const total = dadosProdutos.length;
+                                const filtrados = dadosProcessados.length;
+                                return `${filtrados} de ${total} produtos`;
+                              })()}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="overflow-x-auto">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead 
+                                className="cursor-pointer hover:bg-gray-50"
+                                onClick={() => handleOrdenacaoRentabilidade('codigo')}
+                              >
+                                <div className="flex items-center space-x-1">
+                                  <span>Código</span>
+                                  {getIconeOrdenacao('codigo')}
+                                </div>
+                              </TableHead>
+                              <TableHead 
+                                className="cursor-pointer hover:bg-gray-50"
+                                onClick={() => handleOrdenacaoRentabilidade('descricao')}
+                              >
+                                <div className="flex items-center space-x-1">
+                                  <span>Descrição</span>
+                                  {getIconeOrdenacao('descricao')}
+                                </div>
+                              </TableHead>
+                              <TableHead 
+                                className="cursor-pointer hover:bg-gray-50 text-right"
+                                onClick={() => handleOrdenacaoRentabilidade('quantidade')}
+                              >
+                                <div className="flex items-center justify-end space-x-1">
+                                  <span>Qtd. Vendida</span>
+                                  {getIconeOrdenacao('quantidade')}
+                                </div>
+                              </TableHead>
+                              <TableHead 
+                                className="cursor-pointer hover:bg-gray-50 text-right"
+                                onClick={() => handleOrdenacaoRentabilidade('valor_unitario_medio')}
+                              >
+                                <div className="flex items-center justify-end space-x-1">
+                                  <span>Valor Unit. Médio</span>
+                                  {getIconeOrdenacao('valor_unitario_medio')}
+                                </div>
+                              </TableHead>
+                              <TableHead 
+                                className="cursor-pointer hover:bg-gray-50 text-right"
+                                onClick={() => handleOrdenacaoRentabilidade('valor')}
+                              >
+                                <div className="flex items-center justify-end space-x-1">
+                                  <span>Faturamento</span>
+                                  {getIconeOrdenacao('valor')}
+                                </div>
+                              </TableHead>
+                              <TableHead 
+                                className="cursor-pointer hover:bg-gray-50 text-right"
+                                onClick={() => handleOrdenacaoRentabilidade('rentabilidade')}
+                              >
+                                <div className="flex items-center justify-end space-x-1">
+                                  <span>Rentabilidade</span>
+                                  {getIconeOrdenacao('rentabilidade')}
+                                </div>
+                              </TableHead>
+                              <TableHead 
+                                className="cursor-pointer hover:bg-gray-50 text-right"
+                                onClick={() => handleOrdenacaoRentabilidade('percentual_faturamento')}
+                              >
+                                <div className="flex items-center justify-end space-x-1">
+                                  <span>% Faturamento</span>
+                                  {getIconeOrdenacao('percentual_faturamento')}
+                                </div>
+                              </TableHead>
+                              <TableHead 
+                                className="cursor-pointer hover:bg-gray-50 text-center"
+                                onClick={() => handleOrdenacaoRentabilidade('categoria')}
+                              >
+                                <div className="flex items-center justify-center space-x-1">
+                                  <span>Categoria</span>
+                                  {getIconeOrdenacao('categoria')}
+                                </div>
+                              </TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {(() => {
+                              const dadosProcessados = processarDadosRentabilidade();
+                              
+                                                             if (dadosProcessados.length === 0) {
+                                 return (
+                                   <TableRow>
+                                     <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                                       Nenhum produto encontrado com os filtros aplicados
+                                     </TableCell>
+                                   </TableRow>
+                                 );
+                               }
+
+                              return dadosProcessados.map((produto) => {
+                                // Limitar descrição a 100 caracteres
+                                const descricaoLimitada = produto.descricao && produto.descricao.length > 100 
+                                  ? produto.descricao.substring(0, 100) + '...' 
+                                  : produto.descricao;
+                                
+                                return (
+                                  <TableRow key={produto.codigo} className={getRowClassByCategoria(produto.categoria)}>
+                                    <TableCell className="font-medium">{produto.codigo}</TableCell>
+                                    <TableCell>
+                                      <div 
+                                        className="max-w-xs truncate"
+                                        title={produto.descricao && produto.descricao.length > 100 ? produto.descricao : undefined}
+                                      >
+                                        {descricaoLimitada || 'Sem descrição'}
+                                      </div>
+                                    </TableCell>
+                                    <TableCell className="text-right">{produto.quantidade.toLocaleString('pt-BR')}</TableCell>
+                                    <TableCell className="text-right">R$ {produto.valor_unitario_medio.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</TableCell>
+                                    <TableCell className="text-right">R$ {produto.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</TableCell>
+                                    <TableCell className="text-right">R$ {produto.rentabilidade.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</TableCell>
+                                    <TableCell className="text-right">
+                                      <span className={`font-medium ${produto.percentual_faturamento >= 10 ? 'text-green-600' : produto.percentual_faturamento >= 5 ? 'text-blue-600' : 'text-gray-600'}`}>
+                                        {produto.percentual_faturamento.toFixed(2)}%
+                                      </span>
+                                    </TableCell>
+                                    <TableCell className="text-center">
+                                      <Badge 
+                                        variant={getBadgeVariantByCategoria(produto.categoria)}
+                                        className={getBadgeClassByCategoria(produto.categoria)}
+                                      >
+                                        {produto.categoria}
+                                      </Badge>
+                                    </TableCell>
+                                  </TableRow>
+                                );
+                              });
+                            })()}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Gráfico de Dispersão - Curva ABC */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Dispersão - Curva ABC</CardTitle>
+                      <CardDescription>Quantidade vs Faturamento - Visualização da classificação ABC</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      {dadosProdutos.length === 0 ? (
+                        <div className="flex items-center justify-center h-64">
+                          <p className="text-muted-foreground">Nenhum dado de produto disponível</p>
+                        </div>
+                      ) : (
+                        <ResponsiveContainer width="100%" height={400}>
+                          <BarChart data={dadosProdutos.slice(0, 15)}>
+                            <CartesianGrid strokeDasharray="3 3" />
+                            <XAxis 
+                              dataKey="descricao" 
+                              tickFormatter={(value) => {
+                                if (!value) return 'Sem descrição';
+                                return value.length > 20 ? value.substring(0, 20) + '...' : value;
+                              }}
+                              angle={-45}
+                              textAnchor="end"
+                              height={100}
+                              interval={0}
+                              tick={{ fontSize: 9 }}
+                              dy={10}
+                            />
+                            <YAxis yAxisId="left" />
+                            <YAxis yAxisId="right" orientation="right" />
+                            <Tooltip 
+                              formatter={(value, name) => {
+                                if (name === 'quantidade') return [`${value.toLocaleString('pt-BR')} unidades`, 'Quantidade'];
+                                if (name === 'valor') return [`R$ ${value.toLocaleString('pt-BR')}`, 'Faturamento'];
+                                return [value, name];
+                              }}
+                            />
+                            <Legend />
+                            <Bar yAxisId="left" dataKey="quantidade" fill="#FF6B6B" name="Quantidade" />
+                            <Bar yAxisId="right" dataKey="valor" fill="#4ECDC4" name="Faturamento" />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      )}
+                    </CardContent>
+                  </Card>
+                </TabsContent>
+
+                {/* Relatório Temporal */}
+                <TabsContent value="temporal" className="space-y-4">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Evolução Temporal</CardTitle>
+                      <CardDescription>Quantidade e valor ao longo do tempo</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <ResponsiveContainer width="100%" height={400}>
+                        <AreaChart data={dadosTemporal}>
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis dataKey="periodo" />
+                          <YAxis yAxisId="left" />
+                          <YAxis yAxisId="right" orientation="right" />
+                          <Tooltip />
+                          <Legend />
+                          <Area yAxisId="left" type="monotone" dataKey="quantidade" stackId="1" stroke="#8884d8" fill="#8884d8" name="Quantidade" />
+                          <Area yAxisId="right" type="monotone" dataKey="valor" stackId="2" stroke="#82ca9d" fill="#82ca9d" name="Valor" />
+                        </AreaChart>
+                      </ResponsiveContainer>
+                    </CardContent>
+                  </Card>
+                </TabsContent>
+
+
+
+                {/* Relatório por Valor */}
+                <TabsContent value="valor" className="space-y-4">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Distribuição por Faixa de Valor</CardTitle>
+                      <CardDescription>Quantidade de notas por faixa de valor</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <ResponsiveContainer width="100%" height={400}>
+                        <BarChart data={dadosValor}>
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis dataKey="faixa" />
+                          <YAxis />
+                          <Tooltip />
+                          <Legend />
+                          <Bar dataKey="quantidade" fill="#FFBB28" name="Quantidade de Notas" />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </CardContent>
+                  </Card>
+
+                  {/* Tabela de Análise por Pareto - Valor */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Análise por Pareto - Faixas de Valor</CardTitle>
+                      <CardDescription>Classificação das faixas de valor por importância no faturamento total</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="overflow-x-auto">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Faixa de Valor</TableHead>
+                              <TableHead className="text-right">Quantidade</TableHead>
+                              <TableHead className="text-right">Valor Total</TableHead>
+                              <TableHead className="text-right">% do Faturamento</TableHead>
+                              <TableHead className="text-center">Pareto</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {(() => {
+                              // Calcular Pareto por valor total das faixas
+                              const totalValor = dadosValor.reduce((sum, faixa) => sum + faixa.valor_total, 0);
+                              let acumulado = 0;
+                              let atingiu80 = false;
+                              
+                              return dadosValor.map((faixa, idx) => {
+                                const percentual = totalValor > 0 ? (faixa.valor_total / totalValor) * 100 : 0;
+                                acumulado += percentual;
+                                const isPareto = !atingiu80 && acumulado <= 80;
+                                if (acumulado >= 80) atingiu80 = true;
+                                
+                                return (
+                                  <TableRow key={faixa.faixa} className={isPareto ? 'bg-orange-50 font-semibold' : ''}>
+                                    <TableCell className="font-medium">{faixa.faixa}</TableCell>
+                                    <TableCell className="text-right">{faixa.quantidade.toLocaleString('pt-BR')}</TableCell>
+                                    <TableCell className="text-right">R$ {faixa.valor_total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</TableCell>
+                                    <TableCell className="text-right">{percentual.toFixed(2)}%</TableCell>
+                                    <TableCell className="text-center">
+                                      {isPareto ? (
+                                        <Badge variant="default" className="bg-orange-600">Sim</Badge>
+                                      ) : (
+                                        <Badge variant="secondary">Não</Badge>
+                                      )}
+                                    </TableCell>
+                                  </TableRow>
+                                );
+                              });
+                            })()}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </TabsContent>
+              </Tabs>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
 
       {/* Modal de Importação */}
       <Dialog open={isImportDialogOpen} onOpenChange={setIsImportDialogOpen}>
@@ -998,6 +3051,136 @@ export default function NotaFiscal() {
               >
                 {isImporting ? "Importando..." : "Importar"}
               </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de Filtros */}
+      <Dialog open={isFilterDialogOpen} onOpenChange={setIsFilterDialogOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Filtros de Notas Fiscais</DialogTitle>
+            <DialogDescription>
+              Configure os filtros para refinar sua busca
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-6">
+            {/* Filtros Básicos */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="filter-status">Status</Label>
+                <Select value={filters.status} onValueChange={(value) => setFilters({...filters, status: value})}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Todos os status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">Todos os status</SelectItem>
+                    <SelectItem value="pendente">Pendente</SelectItem>
+                    <SelectItem value="emitida">Emitida</SelectItem>
+                    <SelectItem value="cancelada">Cancelada</SelectItem>
+                    <SelectItem value="denegada">Denegada</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="filter-tipo">Tipo</Label>
+                <Select value={filters.tipo} onValueChange={(value) => setFilters({...filters, tipo: value})}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Todos os tipos" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">Todos os tipos</SelectItem>
+                    <SelectItem value="entrada">Entrada</SelectItem>
+                    <SelectItem value="saida">Saída</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="filter-numero">Número da NF</Label>
+                <Input
+                  placeholder="Digite o número"
+                  value={filters.numero}
+                  onChange={(e) => setFilters({...filters, numero: e.target.value})}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="filter-cliente">Cliente</Label>
+                <Input
+                  placeholder="Digite o nome do cliente"
+                  value={filters.cliente}
+                  onChange={(e) => setFilters({...filters, cliente: e.target.value})}
+                />
+              </div>
+            </div>
+
+            {/* Filtros de Data */}
+            <div className="space-y-4">
+              <Label>Período de Emissão</Label>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="filter-data-inicio">Data Início</Label>
+                  <Input
+                    type="date"
+                    value={filters.dataInicio}
+                    onChange={(e) => setFilters({...filters, dataInicio: e.target.value})}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="filter-data-fim">Data Fim</Label>
+                  <Input
+                    type="date"
+                    value={filters.dataFim}
+                    onChange={(e) => setFilters({...filters, dataFim: e.target.value})}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Filtros de Valor */}
+            <div className="space-y-4">
+              <Label>Faixa de Valor</Label>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="filter-valor-min">Valor Mínimo</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    placeholder="0,00"
+                    value={filters.valorMin}
+                    onChange={(e) => setFilters({...filters, valorMin: e.target.value})}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="filter-valor-max">Valor Máximo</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    placeholder="0,00"
+                    value={filters.valorMax}
+                    onChange={(e) => setFilters({...filters, valorMax: e.target.value})}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Botões de Ação */}
+            <div className="flex justify-between pt-4">
+              <Button variant="outline" onClick={clearFilters}>
+                Limpar Filtros
+              </Button>
+              <div className="flex space-x-2">
+                <Button variant="outline" onClick={() => setIsFilterDialogOpen(false)}>
+                  Cancelar
+                </Button>
+                <Button onClick={handleApplyFilters}>
+                  Aplicar Filtros
+                </Button>
+              </div>
             </div>
           </div>
         </DialogContent>

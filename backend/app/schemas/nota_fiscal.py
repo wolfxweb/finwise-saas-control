@@ -159,6 +159,7 @@ class NotaFiscalList(BaseModel):
     status: str
     origem: str
     created_at: datetime
+    produtos: List[NotaFiscalProduto] = []
 
     class Config:
         from_attributes = True

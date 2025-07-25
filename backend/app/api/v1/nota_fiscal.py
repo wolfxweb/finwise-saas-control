@@ -77,14 +77,12 @@ def create_nota_fiscal(
 
 @router.get("/", response_model=List[NotaFiscalList])
 def list_notas_fiscais(
-    skip: int = 0,
-    limit: int = 100,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Lista notas fiscais da empresa"""
-    notas_fiscais = NotaFiscalService.get_notas_fiscais(
-        db, current_user.company_id, skip, limit
+    """Lista TODAS as notas fiscais da empresa (sem limite)"""
+    notas_fiscais = NotaFiscalService.get_all_notas_fiscais(
+        db, current_user.company_id
     )
     return notas_fiscais
 

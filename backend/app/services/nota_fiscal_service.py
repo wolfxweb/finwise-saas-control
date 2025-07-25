@@ -1,7 +1,7 @@
 import xml.etree.ElementTree as ET
 from typing import List, Optional, Dict, Any
 from datetime import datetime
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import and_
 from app.models.nota_fiscal import NotaFiscal, NotaFiscalProduto
 from app.schemas.nota_fiscal import NotaFiscalCreate, NotaFiscalUpdate, NotaFiscalImport
@@ -330,11 +330,20 @@ class NotaFiscalService:
             raise ValueError(f"Erro ao importar XML: {str(e)}")
     
     @staticmethod
-    def get_notas_fiscais(db: Session, company_id: UUID, skip: int = 0, limit: int = 100) -> List[NotaFiscal]:
-        """Lista notas fiscais de uma empresa"""
+    def get_notas_fiscais(db: Session, company_id: UUID, skip: int = 0, limit: int = 1000) -> List[NotaFiscal]:
+        """Lista notas fiscais de uma empresa com paginação"""
         return db.query(NotaFiscal).filter(
             NotaFiscal.company_id == company_id
         ).offset(skip).limit(limit).all()
+
+    @staticmethod
+    def get_all_notas_fiscais(db: Session, company_id: UUID) -> List[NotaFiscal]:
+        """Lista TODAS as notas fiscais de uma empresa sem limite"""
+        return db.query(NotaFiscal).filter(
+            NotaFiscal.company_id == company_id
+        ).options(
+            joinedload(NotaFiscal.produtos)
+        ).all()
     
     @staticmethod
     def get_nota_fiscal(db: Session, nota_fiscal_id: int, company_id: UUID) -> Optional[NotaFiscal]:
