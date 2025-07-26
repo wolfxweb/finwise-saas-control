@@ -59,11 +59,11 @@ def create_product(
         db.commit()
         db.refresh(db_product)
         
-        # Se o produto é SKU principal e tem um SKU na aba básicas, criar automaticamente o SKU na tabela product_skus
-        if db_product.is_main_sku and db_product.sku:
+        # Se o produto tem um SKU na aba básicas, criar automaticamente o SKU na tabela product_skus
+        if db_product.sku:
             from app.models.product_sku import ProductSKU
             
-            # Criar SKU principal automaticamente usando o SKU da aba básicas
+            # Criar SKU automaticamente usando o SKU da aba básicas
             db_sku = ProductSKU(
                 product_id=db_product.id,
                 sku_code=db_product.sku,  # Usa o SKU da aba básicas
@@ -75,12 +75,12 @@ def create_product(
                 taxes={},
                 is_active=True,
                 is_available_for_sale=True,
-                is_stock_sku=True
+                is_stock_sku=db_product.is_main_sku  # True se for SKU principal, False se não for
             )
             
             db.add(db_sku)
             db.commit()
-            print(f"SKU principal criado automaticamente usando SKU da aba básicas: {db_sku.sku_code}")
+            print(f"SKU criado automaticamente usando SKU da aba básicas: {db_sku.sku_code} (is_stock_sku: {db_sku.is_stock_sku})")
         
         print(f"Produto criado com sucesso: {db_product.id}")
         return db_product
@@ -239,16 +239,13 @@ def update_product(
     # Gerenciar SKU automaticamente após atualização
     from app.models.product_sku import ProductSKU
     
-    # Verificar se existe um SKU principal para este produto
+    # Verificar se existe um SKU para este produto
     existing_sku = db.query(ProductSKU).filter(
-        and_(
-            ProductSKU.product_id == db_product.id,
-            ProductSKU.is_stock_sku == True
-        )
+        ProductSKU.product_id == db_product.id
     ).first()
     
-    # Se o produto é SKU principal e tem um SKU na aba básicas
-    if db_product.is_main_sku and db_product.sku:
+    # Se o produto tem um SKU na aba básicas
+    if db_product.sku:
         if existing_sku:
             # Atualizar SKU existente
             existing_sku.sku_code = db_product.sku
@@ -257,9 +254,10 @@ def update_product(
             existing_sku.current_stock = db_product.current_stock or 0
             existing_sku.minimum_stock = db_product.min_stock or 0
             existing_sku.reserved_stock = db_product.reserved_stock or 0
-            print(f"SKU principal atualizado: {existing_sku.sku_code}")
+            existing_sku.is_stock_sku = db_product.is_main_sku  # Atualizar se mudou
+            print(f"SKU atualizado: {existing_sku.sku_code} (is_stock_sku: {existing_sku.is_stock_sku})")
         else:
-            # Criar novo SKU principal
+            # Criar novo SKU
             db_sku = ProductSKU(
                 product_id=db_product.id,
                 sku_code=db_product.sku,
@@ -271,10 +269,10 @@ def update_product(
                 taxes={},
                 is_active=True,
                 is_available_for_sale=True,
-                is_stock_sku=True
+                is_stock_sku=db_product.is_main_sku  # True se for SKU principal, False se não for
             )
             db.add(db_sku)
-            print(f"SKU principal criado durante atualização: {db_sku.sku_code}")
+            print(f"SKU criado durante atualização: {db_sku.sku_code} (is_stock_sku: {db_sku.is_stock_sku})")
     
     db.commit()
     return db_product
