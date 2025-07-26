@@ -518,6 +518,7 @@ export default function Produtos() {
       });
       
       // Carregar SKUs do produto
+      console.log("SKUs recebidos (visualização):", fullProduct.skus);
       setSkus(fullProduct.skus || []);
       
       // Definir como produto em visualização (não edição)
@@ -610,6 +611,7 @@ export default function Produtos() {
       });
       
       // Carregar SKUs do produto
+      console.log("SKUs recebidos (edição):", fullProduct.skus);
       setSkus(fullProduct.skus || []);
       
       // Definir como produto em edição
@@ -1461,12 +1463,6 @@ export default function Produtos() {
                   <div className="space-y-4">
                     <div className="flex justify-between items-center">
                       <h3 className="text-lg font-semibold">SKUs do Produto</h3>
-                      {!isViewMode && (
-                        <Button onClick={addSku} size="sm">
-                          <Plus className="h-4 w-4 mr-2" />
-                          Adicionar SKU
-                        </Button>
-                      )}
                     </div>
 
                     {skus.length === 0 ? (
@@ -1513,16 +1509,6 @@ export default function Produtos() {
                                     </div>
                                   )}
                                 </div>
-                                {!isViewMode && (
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => removeSku(index)}
-                                    className="text-red-600 hover:text-red-700"
-                                  >
-                                    <Trash2 className="h-4 w-4" />
-                                  </Button>
-                                )}
                               </div>
                             </CardContent>
                           </Card>

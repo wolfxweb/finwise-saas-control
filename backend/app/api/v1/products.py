@@ -59,6 +59,29 @@ def create_product(
         db.commit()
         db.refresh(db_product)
         
+        # Se o produto é SKU principal e tem um SKU na aba básicas, criar automaticamente o SKU na tabela product_skus
+        if db_product.is_main_sku and db_product.sku:
+            from app.models.product_sku import ProductSKU
+            
+            # Criar SKU principal automaticamente usando o SKU da aba básicas
+            db_sku = ProductSKU(
+                product_id=db_product.id,
+                sku_code=db_product.sku,  # Usa o SKU da aba básicas
+                cost_price=db_product.cost_price or 1.0,  # Valor mínimo para passar na validação
+                sale_price=db_product.sale_price or 1.0,  # Valor mínimo para passar na validação
+                current_stock=db_product.current_stock or 0,
+                minimum_stock=db_product.min_stock or 0,
+                reserved_stock=db_product.reserved_stock or 0,
+                taxes={},
+                is_active=True,
+                is_available_for_sale=True,
+                is_stock_sku=True
+            )
+            
+            db.add(db_sku)
+            db.commit()
+            print(f"SKU principal criado automaticamente usando SKU da aba básicas: {db_sku.sku_code}")
+        
         print(f"Produto criado com sucesso: {db_product.id}")
         return db_product
         
@@ -213,6 +236,47 @@ def update_product(
     db.commit()
     db.refresh(db_product)
     
+    # Gerenciar SKU automaticamente após atualização
+    from app.models.product_sku import ProductSKU
+    
+    # Verificar se existe um SKU principal para este produto
+    existing_sku = db.query(ProductSKU).filter(
+        and_(
+            ProductSKU.product_id == db_product.id,
+            ProductSKU.is_stock_sku == True
+        )
+    ).first()
+    
+    # Se o produto é SKU principal e tem um SKU na aba básicas
+    if db_product.is_main_sku and db_product.sku:
+        if existing_sku:
+            # Atualizar SKU existente
+            existing_sku.sku_code = db_product.sku
+            existing_sku.cost_price = db_product.cost_price or 1.0  # Valor mínimo para passar na validação
+            existing_sku.sale_price = db_product.sale_price or 1.0  # Valor mínimo para passar na validação
+            existing_sku.current_stock = db_product.current_stock or 0
+            existing_sku.minimum_stock = db_product.min_stock or 0
+            existing_sku.reserved_stock = db_product.reserved_stock or 0
+            print(f"SKU principal atualizado: {existing_sku.sku_code}")
+        else:
+            # Criar novo SKU principal
+            db_sku = ProductSKU(
+                product_id=db_product.id,
+                sku_code=db_product.sku,
+                cost_price=db_product.cost_price or 1.0,  # Valor mínimo para passar na validação
+                sale_price=db_product.sale_price or 1.0,  # Valor mínimo para passar na validação
+                current_stock=db_product.current_stock or 0,
+                minimum_stock=db_product.min_stock or 0,
+                reserved_stock=db_product.reserved_stock or 0,
+                taxes={},
+                is_active=True,
+                is_available_for_sale=True,
+                is_stock_sku=True
+            )
+            db.add(db_sku)
+            print(f"SKU principal criado durante atualização: {db_sku.sku_code}")
+    
+    db.commit()
     return db_product
 
 @router.delete("/{product_id}", status_code=status.HTTP_204_NO_CONTENT)
