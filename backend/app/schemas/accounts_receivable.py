@@ -85,6 +85,10 @@ class AccountsReceivableList(BaseModel):
     installment_info: str
     is_overdue: bool
     created_at: datetime
+    # Campos de parcelamento
+    installment_number: int
+    total_installments: int
+    installment_amount: Optional[float] = None
     
     class Config:
         from_attributes = True

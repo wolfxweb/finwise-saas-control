@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Plus, Search, Filter, Download, Edit, Eye, Trash2, Save, X, Calendar, DollarSign, Users, CreditCard } from "lucide-react";
+import { Plus, Search, Filter, Download, Edit, Eye, Trash2, Save, X, Calendar, DollarSign, Users, BarChart3, Tag } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { api } from "@/services/api";
 
@@ -22,6 +23,14 @@ interface Customer {
 interface Category {
   id: number;
   name: string;
+  code: string;
+  description?: string;
+  parent_id?: number;
+  is_active: boolean;
+  sort_order: number;
+  receivables_count: number;
+  children_count: number;
+  created_at: string;
 }
 
 interface AccountsReceivable {
@@ -76,7 +85,7 @@ export default function ContasReceber() {
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [filterStatus, setFilterStatus] = useState<string>("all");
-  const [filterType, setFilterType] = useState<string>("all");
+
   
   // Estados do modal
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -84,6 +93,25 @@ export default function ContasReceber() {
   const [editingReceivable, setEditingReceivable] = useState<AccountsReceivable | null>(null);
   const [activeTab, setActiveTab] = useState("basic");
   const [isInstallmentMode, setIsInstallmentMode] = useState(false);
+  
+  // Estados da modal de confirmação de exclusão
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [receivableToDelete, setReceivableToDelete] = useState<AccountsReceivable | null>(null);
+  
+  // Estados para abas
+  const [activeMainTab, setActiveMainTab] = useState("receivables");
+  
+  // Estados para categorias
+  const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
+  const [editingCategory, setEditingCategory] = useState<Category | null>(null);
+  const [categoryFormData, setCategoryFormData] = useState({
+    name: "",
+    code: "",
+    description: "",
+    parent_id: null as number | null,
+    is_active: true,
+    sort_order: 0
+  });
   
   const [formData, setFormData] = useState({
     description: "",
@@ -335,26 +363,32 @@ export default function ContasReceber() {
   };
 
   const handleDeleteReceivable = (receivable: AccountsReceivable) => {
-    if (!confirm(`Tem certeza que deseja deletar a conta "${receivable.description}"?`)) {
-      return;
-    }
+    setReceivableToDelete(receivable);
+    setIsDeleteModalOpen(true);
+  };
 
-    api.delete(`/api/v1/accounts-receivable/${receivable.id}`)
-      .then(() => {
-        toast({
-          title: "Sucesso",
-          description: "Conta a receber deletada com sucesso"
-        });
-        loadData();
-      })
-      .catch((error: any) => {
-        console.error("Erro ao deletar conta a receber:", error);
-        toast({
-          title: "Erro",
-          description: error.response?.data?.detail || "Erro ao deletar conta a receber",
-          variant: "destructive"
-        });
+  const confirmDeleteReceivable = async () => {
+    if (!receivableToDelete) return;
+
+    try {
+      await api.delete(`/api/v1/accounts-receivable/${receivableToDelete.id}`);
+      
+      toast({
+        title: "Sucesso",
+        description: "Conta a receber deletada com sucesso"
       });
+      
+      setIsDeleteModalOpen(false);
+      setReceivableToDelete(null);
+      loadData();
+    } catch (error: any) {
+      console.error("Erro ao deletar conta a receber:", error);
+      toast({
+        title: "Erro",
+        description: error.response?.data?.detail || "Erro ao deletar conta a receber",
+        variant: "destructive"
+      });
+    }
   };
 
   const handleQuickStatusChange = async (receivable: AccountsReceivable, newStatus: "pending" | "paid" | "overdue" | "cancelled") => {
@@ -409,9 +443,7 @@ export default function ContasReceber() {
     }
   };
 
-  const getTypeIcon = (type: string) => {
-    return type === "cash" ? <DollarSign className="h-4 w-4" /> : <CreditCard className="h-4 w-4" />;
-  };
+
 
   const filteredReceivables = receivables.filter(receivable => {
     const matchesSearch = receivable.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -419,13 +451,16 @@ export default function ContasReceber() {
                          (receivable.reference && receivable.reference.toLowerCase().includes(searchTerm.toLowerCase()));
     
     const matchesStatus = filterStatus === "all" || receivable.status === filterStatus;
-    const matchesType = filterType === "all" || receivable.receivable_type === filterType;
     
-    return matchesSearch && matchesStatus && matchesType;
+    return matchesSearch && matchesStatus;
   });
 
   const calculateInstallmentAmount = () => {
-    if (formData.total_amount && formData.total_installments > 0) {
+    if (formData.installment_amount && formData.installment_amount > 0) {
+      // Se o valor da parcela foi informado, usar ele
+      return formData.installment_amount;
+    } else if (formData.total_amount && formData.total_installments > 0) {
+      // Se não foi informado, calcular dividindo o total pelo número de parcelas
       return formData.total_amount / formData.total_installments;
     }
     return 0;
@@ -434,8 +469,85 @@ export default function ContasReceber() {
   const calculateTotalFromInstallment = () => {
     if (formData.installment_amount && formData.total_installments > 0) {
       return formData.installment_amount * formData.total_installments;
+    } else if (formData.total_amount && formData.total_installments > 0) {
+      // Se não tem valor da parcela, usar o valor total
+      return formData.total_amount;
     }
     return 0;
+  };
+
+  // Funções para categorias
+  const handleCreateCategory = () => {
+    setEditingCategory(null);
+    setCategoryFormData({ 
+      name: "", 
+      code: "",
+      description: "", 
+      parent_id: null,
+      is_active: true,
+      sort_order: 0
+    });
+    setIsCategoryModalOpen(true);
+  };
+
+  const handleEditCategory = (category: Category) => {
+    setEditingCategory(category);
+    setCategoryFormData({ 
+      name: category.name, 
+      code: category.code,
+      description: category.description || "",
+      parent_id: category.parent_id || null,
+      is_active: category.is_active,
+      sort_order: category.sort_order
+    });
+    setIsCategoryModalOpen(true);
+  };
+
+  const handleSaveCategory = async () => {
+    try {
+      if (editingCategory) {
+        await api.put(`/api/v1/categories/${editingCategory.id}`, categoryFormData);
+        toast({
+          title: "Sucesso",
+          description: "Categoria atualizada com sucesso"
+        });
+      } else {
+        await api.post("/api/v1/categories", categoryFormData);
+        toast({
+          title: "Sucesso",
+          description: "Categoria criada com sucesso"
+        });
+      }
+      setIsCategoryModalOpen(false);
+      loadCategories();
+    } catch (error) {
+      console.error("Erro ao salvar categoria:", error);
+      toast({
+        title: "Erro",
+        description: "Erro ao salvar categoria",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const handleDeleteCategory = async (categoryId: number) => {
+    if (confirm("Tem certeza que deseja deletar esta categoria?")) {
+      try {
+        await api.delete(`/api/v1/categories/${categoryId}`);
+        toast({
+          title: "Sucesso",
+          description: "Categoria deletada com sucesso"
+        });
+        loadCategories();
+      } catch (error) {
+        console.error("Erro ao deletar categoria:", error);
+        toast({
+          title: "Erro",
+          description: "Erro ao deletar categoria",
+          variant: "destructive"
+        });
+      }
+    }
   };
 
   return (
@@ -452,243 +564,488 @@ export default function ContasReceber() {
         </Button>
       </div>
 
-      {/* Cards de Resumo */}
-      {summary && (
-        <div className="grid gap-6 md:grid-cols-4">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total a Receber</CardTitle>
-              <DollarSign className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-primary">
-                R$ {summary.total_receivable.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Recebido</CardTitle>
-              <DollarSign className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-green-600">
-                R$ {summary.total_paid.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Em Atraso</CardTitle>
-              <Calendar className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-destructive">
-                R$ {summary.total_overdue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Pendente</CardTitle>
-              <Calendar className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-warning">
-                R$ {summary.total_pending.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
+            {/* Abas Principais */}
+      <Tabs value={activeMainTab} onValueChange={setActiveMainTab} className="w-full">
+        <TabsList className="grid w-full grid-cols-3">
+          <TabsTrigger value="receivables" className="flex items-center gap-2">
+            <DollarSign className="h-4 w-4" />
+            Contas a Receber
+          </TabsTrigger>
+          <TabsTrigger value="categories" className="flex items-center gap-2">
+            <Tag className="h-4 w-4" />
+            Categorias
+          </TabsTrigger>
+          <TabsTrigger value="reports" className="flex items-center gap-2">
+            <BarChart3 className="h-4 w-4" />
+            Relatórios
+          </TabsTrigger>
+        </TabsList>
 
-      {/* Filtros */}
-      <Card>
-        <CardContent className="pt-6">
-          <div className="flex flex-col space-y-4 md:flex-row md:space-y-0 md:space-x-4">
-            <div className="flex-1">
-              <div className="relative">
-                <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Buscar contas..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10"
-                />
+        {/* Aba: Contas a Receber */}
+        <TabsContent value="receivables" className="space-y-6">
+          {/* Cards de Resumo */}
+          {summary && (
+            <div className="grid gap-6 md:grid-cols-4">
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Total a Receber</CardTitle>
+                  <DollarSign className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold text-primary">
+                    R$ {summary.total_receivable.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                  </div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Recebido</CardTitle>
+                  <DollarSign className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold text-green-600">
+                    R$ {summary.total_paid.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                  </div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Em Atraso</CardTitle>
+                  <Calendar className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold text-destructive">
+                    R$ {summary.total_overdue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                  </div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Pendente</CardTitle>
+                  <Calendar className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold text-warning">
+                    R$ {summary.total_pending.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          )}
+
+          {/* Filtros */}
+          <Card>
+            <CardContent className="pt-6">
+              <div className="flex flex-col space-y-4 md:flex-row md:space-y-0 md:space-x-4">
+                <div className="flex-1">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Buscar contas..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="pl-10"
+                    />
+                  </div>
+                </div>
+                <div className="w-full md:w-48">
+                  <Select value={filterStatus} onValueChange={setFilterStatus}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Todos os status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todos</SelectItem>
+                      <SelectItem value="pending">Pendente</SelectItem>
+                      <SelectItem value="paid">Pago</SelectItem>
+                      <SelectItem value="overdue">Vencido</SelectItem>
+                      <SelectItem value="cancelled">Cancelado</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
+            </CardContent>
+          </Card>
+
+          {/* Tabela */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Contas a Receber</CardTitle>
+              <CardDescription>
+                {filteredReceivables.length} conta(s) encontrada(s)
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {isLoading ? (
+                <div className="text-center py-8">Carregando...</div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Descrição</TableHead>
+                      <TableHead>Cliente</TableHead>
+                      <TableHead>Valor</TableHead>
+                      <TableHead>Parcelas</TableHead>
+                      <TableHead>Vencimento</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Ações</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredReceivables.map((receivable) => (
+                      <TableRow key={receivable.id}>
+                        <TableCell>
+                          <div>
+                            <div className="font-medium">{receivable.description}</div>
+                            {receivable.receivable_type === "installment" && receivable.total_installments > 1 && (
+                              <div className="text-sm text-muted-foreground">
+                                Parcela {receivable.installment_number}/{receivable.total_installments}
+                              </div>
+                            )}
+                            {receivable.reference && (
+                              <div className="text-sm text-muted-foreground">
+                                Ref: {receivable.reference}
+                              </div>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>{receivable.customer_name}</TableCell>
+                        <TableCell>
+                          <div>
+                            <div className="font-medium">
+                              {receivable.total_installments > 1 ? (
+                                // Para parcelamentos: mostra o valor total do parcelamento
+                                `R$ ${(receivable.total_amount * receivable.total_installments).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
+                              ) : (
+                                // Para contas à vista: mostra o valor da conta
+                                `R$ ${receivable.total_amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
+                              )}
+                            </div>
+                            {receivable.paid_amount > 0 && (
+                              <div className="text-sm text-muted-foreground">
+                                Pago: R$ {receivable.paid_amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                              </div>
+                            )}
+                            {receivable.total_installments > 1 && (
+                              <div className="text-sm text-muted-foreground">
+                                Parcela: R$ {receivable.total_amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                              </div>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="text-center">
+                            {receivable.total_installments > 1 ? (
+                              <span className="text-sm font-medium">
+                                {receivable.installment_number}/{receivable.total_installments}
+                              </span>
+                            ) : (
+                              <span className="text-sm text-muted-foreground">À vista</span>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="text-center">
+                            {receivable.due_date ? new Date(receivable.due_date).toLocaleDateString('pt-BR') : '-'}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          {getStatusBadge(receivable.status)}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleViewReceivable(receivable)}
+                            >
+                              <Eye className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleEditReceivable(receivable)}
+                            >
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                            
+                            {/* Alteração rápida de status */}
+                            <div className="flex items-center gap-1">
+                              {receivable.status !== "paid" && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleQuickStatusChange(receivable, "paid")}
+                                  className="text-green-600 hover:text-green-700"
+                                  title="Marcar como Pago"
+                                >
+                                  <DollarSign className="h-4 w-4" />
+                                </Button>
+                              )}
+                              {receivable.status !== "pending" && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleQuickStatusChange(receivable, "pending")}
+                                  className="text-blue-600 hover:text-blue-700"
+                                  title="Marcar como Pendente"
+                                >
+                                  <Calendar className="h-4 w-4" />
+                                </Button>
+                              )}
+                              {receivable.status !== "cancelled" && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleQuickStatusChange(receivable, "cancelled")}
+                                  className="text-gray-600 hover:text-gray-700"
+                                  title="Cancelar"
+                                >
+                                  <X className="h-4 w-4" />
+                                </Button>
+                              )}
+                            </div>
+                            
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleDeleteReceivable(receivable)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Aba: Categorias */}
+        <TabsContent value="categories" className="space-y-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-2xl font-semibold">Categorias</h2>
+              <p className="text-muted-foreground">Organize suas contas a receber em categorias</p>
             </div>
-            <div className="w-full md:w-48">
-              <Select value={filterStatus} onValueChange={setFilterStatus}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Todos os status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todos</SelectItem>
-                  <SelectItem value="pending">Pendente</SelectItem>
-                  <SelectItem value="paid">Pago</SelectItem>
-                  <SelectItem value="overdue">Vencido</SelectItem>
-                  <SelectItem value="cancelled">Cancelado</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="w-full md:w-48">
-              <Select value={filterType} onValueChange={setFilterType}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Todos os tipos" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todos</SelectItem>
-                  <SelectItem value="cash">À vista</SelectItem>
-                  <SelectItem value="installment">Parcelado</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+            <Button onClick={handleCreateCategory} className="bg-gradient-primary text-primary-foreground">
+              <Plus className="mr-2 h-4 w-4" />
+              Nova Categoria
+            </Button>
           </div>
-        </CardContent>
-      </Card>
 
-      {/* Tabela */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Contas a Receber</CardTitle>
-          <CardDescription>
-            {filteredReceivables.length} conta(s) encontrada(s)
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {isLoading ? (
-            <div className="text-center py-8">Carregando...</div>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Descrição</TableHead>
-                  <TableHead>Cliente</TableHead>
-                  <TableHead>Valor</TableHead>
-                  <TableHead>Vencimento</TableHead>
-                  <TableHead>Parcelas</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Ações</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredReceivables.map((receivable) => (
-                  <TableRow key={receivable.id}>
-                    <TableCell>
-                      <div>
-                        <div className="font-medium">{receivable.description}</div>
-                        {receivable.receivable_type === "installment" && receivable.total_installments > 1 && (
-                          <div className="text-sm text-muted-foreground">
-                            Parcela {receivable.installment_number}/{receivable.total_installments}
-                          </div>
-                        )}
-                        {receivable.reference && (
-                          <div className="text-sm text-muted-foreground">
-                            Ref: {receivable.reference}
-                          </div>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell>{receivable.customer_name}</TableCell>
-                    <TableCell>
+          {/* Cards de Resumo - Categorias */}
+          <div className="grid gap-6 md:grid-cols-4">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Total de Categorias</CardTitle>
+                <Tag className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{categories.length}</div>
+                <p className="text-xs text-muted-foreground">Categorias cadastradas</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Categorias Ativas</CardTitle>
+                <Tag className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-success">
+                  {categories.filter(c => c.is_active).length}
+                </div>
+                <p className="text-xs text-muted-foreground">Ativas no sistema</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Categorias Raiz</CardTitle>
+                <Tag className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-primary">
+                  {categories.filter(c => !c.parent_id).length}
+                </div>
+                <p className="text-xs text-muted-foreground">Categorias principais</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Subcategorias</CardTitle>
+                <Tag className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-warning">
+                  {categories.filter(c => c.parent_id).length}
+                </div>
+                <p className="text-xs text-muted-foreground">Categorias filhas</p>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Lista de Categorias */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Gerenciamento de Categorias</CardTitle>
+              <CardDescription>Lista de todas as categorias cadastradas</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                <div className="flex items-center space-x-4">
+                  <Input
+                    placeholder="Buscar categorias..."
+                    className="max-w-sm"
+                  />
+                  <Select>
+                    <SelectTrigger className="w-48">
+                      <SelectValue placeholder="Filtrar por status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todas</SelectItem>
+                      <SelectItem value="active">Ativas</SelectItem>
+                      <SelectItem value="inactive">Inativas</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                
+                <div className="border rounded-lg">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Nome</TableHead>
+                        <TableHead>Código</TableHead>
+                        <TableHead>Descrição</TableHead>
+                        <TableHead>Contas</TableHead>
+                        <TableHead>Subcategorias</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Ações</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {categories.map((category) => (
+                        <TableRow key={category.id}>
+                          <TableCell className="font-medium">{category.name}</TableCell>
+                          <TableCell>{category.code}</TableCell>
+                          <TableCell className="max-w-xs truncate">
+                            {category.description || "-"}
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline">{category.receivables_count}</Badge>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline">{category.children_count}</Badge>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant={category.is_active ? "default" : "secondary"}>
+                              {category.is_active ? "Ativa" : "Inativa"}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center space-x-2">
+                              <Button 
+                                variant="outline" 
+                                size="sm"
+                                onClick={() => handleEditCategory(category)}
+                              >
+                                Editar
+                              </Button>
+                              <Button 
+                                variant="outline" 
+                                size="sm"
+                                onClick={() => handleDeleteCategory(category.id)}
+                              >
+                                Remover
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Aba: Relatórios */}
+        <TabsContent value="reports" className="space-y-6">
+          <div className="flex justify-between items-center">
+            <div>
+              <h2 className="text-2xl font-bold">Relatórios</h2>
+              <p className="text-muted-foreground">Visualize relatórios e análises das suas contas a receber</p>
+            </div>
+            <Button variant="outline">
+              <Download className="h-4 w-4 mr-2" />
+              Exportar Relatório
+            </Button>
+          </div>
+
+          {summary && (
+            <div className="grid gap-6 md:grid-cols-2">
+              {/* Resumo por Status */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Resumo por Status</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    <div className="flex justify-between items-center">
+                      <span>Pendente</span>
                       <div className="flex items-center gap-2">
-                        {getTypeIcon(receivable.receivable_type)}
-                        <span className="capitalize">
-                          {receivable.receivable_type === "cash" ? "À vista" : "Parcelado"}
+                        <span className="font-medium">{summary.pending_count}</span>
+                        <span className="text-muted-foreground">
+                          R$ {summary.total_pending.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                         </span>
                       </div>
-                    </TableCell>
-                    <TableCell>
-                      <div>
-                        <div className="font-medium">
-                          R$ {receivable.total_amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                        </div>
-                        {receivable.paid_amount > 0 && (
-                          <div className="text-sm text-muted-foreground">
-                            Pago: R$ {receivable.paid_amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                          </div>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-1">
-                        <Calendar className="h-3 w-3" />
-                        {new Date(receivable.due_date).toLocaleDateString('pt-BR')}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      {getStatusBadge(receivable.status)}
-                    </TableCell>
-                    <TableCell>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span>Pago</span>
                       <div className="flex items-center gap-2">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleViewReceivable(receivable)}
-                        >
-                          <Eye className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleEditReceivable(receivable)}
-                        >
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                        
-                        {/* Alteração rápida de status */}
-                        <div className="flex items-center gap-1">
-                          {receivable.status !== "paid" && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleQuickStatusChange(receivable, "paid")}
-                              className="text-green-600 hover:text-green-700"
-                              title="Marcar como Pago"
-                            >
-                              <DollarSign className="h-4 w-4" />
-                            </Button>
-                          )}
-                          {receivable.status !== "pending" && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleQuickStatusChange(receivable, "pending")}
-                              className="text-blue-600 hover:text-blue-700"
-                              title="Marcar como Pendente"
-                            >
-                              <Calendar className="h-4 w-4" />
-                            </Button>
-                          )}
-                          {receivable.status !== "cancelled" && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleQuickStatusChange(receivable, "cancelled")}
-                              className="text-gray-600 hover:text-gray-700"
-                              title="Cancelar"
-                            >
-                              <X className="h-4 w-4" />
-                            </Button>
-                          )}
-                        </div>
-                        
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleDeleteReceivable(receivable)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                        <span className="font-medium">{summary.paid_count}</span>
+                        <span className="text-muted-foreground">
+                          R$ {summary.total_paid.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                        </span>
                       </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span>Vencido</span>
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium">{summary.overdue_count}</span>
+                        <span className="text-muted-foreground">
+                          R$ {summary.total_overdue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Resumo Mensal */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Resumo Mensal</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    {summary.by_month.slice(0, 6).map((month, index) => (
+                      <div key={index} className="flex justify-between items-center">
+                        <span>{month.month}</span>
+                        <span className="font-medium">
+                          R$ {month.total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
           )}
-        </CardContent>
-      </Card>
+        </TabsContent>
+      </Tabs>
 
       {/* Modal */}
       <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
@@ -1000,6 +1357,143 @@ export default function ContasReceber() {
                 {editingReceivable ? "Atualizar" : "Criar"}
               </Button>
             )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de Categorias */}
+      <Dialog open={isCategoryModalOpen} onOpenChange={setIsCategoryModalOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>
+              {editingCategory ? "Editar Categoria" : "Nova Categoria"}
+            </DialogTitle>
+            <DialogDescription>
+              {editingCategory ? "Edite as informações da categoria" : "Crie uma nova categoria para organizar suas contas a receber"}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-6">
+            {/* Informações Básicas */}
+            <div className="space-y-4">
+              <h4 className="font-medium text-sm text-muted-foreground">Informações Básicas</h4>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="category_name">Nome da Categoria *</Label>
+                  <Input
+                    id="category_name"
+                    value={categoryFormData.name}
+                    onChange={(e) => setCategoryFormData({...categoryFormData, name: e.target.value})}
+                    placeholder="Nome da categoria"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="category_code">Código *</Label>
+                  <Input
+                    id="category_code"
+                    value={categoryFormData.code}
+                    onChange={(e) => setCategoryFormData({...categoryFormData, code: e.target.value})}
+                    placeholder="Código único"
+                  />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="category_description">Descrição</Label>
+                <Textarea
+                  id="category_description"
+                  value={categoryFormData.description}
+                  onChange={(e) => setCategoryFormData({...categoryFormData, description: e.target.value})}
+                  placeholder="Descrição da categoria"
+                  rows={3}
+                />
+              </div>
+            </div>
+
+            {/* Configurações */}
+            <div className="space-y-4">
+              <h4 className="font-medium text-sm text-muted-foreground">Configurações</h4>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="category_parent">Categoria Pai</Label>
+                  <Select 
+                    value={categoryFormData.parent_id?.toString() || ""} 
+                    onValueChange={(value) => setCategoryFormData({
+                      ...categoryFormData, 
+                      parent_id: value ? parseInt(value) : null
+                    })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione a categoria pai" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="">Nenhuma (Categoria Raiz)</SelectItem>
+                      {categories
+                        .filter(cat => cat.id !== editingCategory?.id)
+                        .map((category) => (
+                          <SelectItem key={category.id} value={category.id.toString()}>
+                            {category.name}
+                          </SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="category_sort_order">Ordem de Exibição</Label>
+                  <Input
+                    id="category_sort_order"
+                    type="number"
+                    value={categoryFormData.sort_order}
+                    onChange={(e) => setCategoryFormData({...categoryFormData, sort_order: parseInt(e.target.value) || 0})}
+                    placeholder="0"
+                  />
+                </div>
+              </div>
+              <div className="flex items-center space-x-2">
+                <Switch
+                  id="category_is_active"
+                  checked={categoryFormData.is_active}
+                  onCheckedChange={(checked) => setCategoryFormData({...categoryFormData, is_active: checked})}
+                />
+                <Label htmlFor="category_is_active">Categoria Ativa</Label>
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsCategoryModalOpen(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={handleSaveCategory}>
+              {editingCategory ? "Atualizar" : "Criar"} Categoria
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de Confirmação de Exclusão */}
+      <Dialog open={isDeleteModalOpen} onOpenChange={setIsDeleteModalOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Confirmar Exclusão</DialogTitle>
+            <DialogDescription>
+              Tem certeza que deseja deletar a conta a receber{" "}
+              <span className="font-semibold text-foreground">
+                "{receivableToDelete?.description}"
+              </span>
+              ?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsDeleteModalOpen(false)}>
+              Cancelar
+            </Button>
+            <Button 
+              variant="destructive" 
+              onClick={confirmDeleteReceivable}
+            >
+              <Trash2 className="h-4 w-4 mr-2" />
+              Deletar
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
