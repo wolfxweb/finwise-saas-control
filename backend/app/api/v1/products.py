@@ -145,12 +145,24 @@ def get_products(
     
     result = []
     for product in products:
-        # Filtrar apenas SKUs ativos
+        # Filtrar apenas SKUs ativos do produto
         active_skus = [sku for sku in product.skus if sku.is_active]
-        sku_count = len(active_skus)
-        total_stock = sum(sku.current_stock for sku in active_skus)
         
-
+        # Contar SKUs associados (que apontam para este produto como stock_sku)
+        from app.models.product_sku import ProductSKU
+        associated_skus = db.query(ProductSKU).filter(
+            and_(
+                ProductSKU.stock_sku_id.in_([sku.id for sku in active_skus if sku.is_stock_sku]),
+                ProductSKU.is_active == True
+            )
+        ).all()
+        
+        # Total de SKUs = SKUs próprios + SKUs associados
+        total_sku_count = len(active_skus) + len(associated_skus)
+        
+        # Calcular estoque total (incluindo SKUs associados)
+        total_stock = sum(sku.current_stock for sku in active_skus)
+        total_stock += sum(sku.current_stock for sku in associated_skus)
         
         result.append(ProductList(
             id=product.id,
@@ -159,7 +171,7 @@ def get_products(
             category=product.category,
             ncm=product.ncm,
             is_active=product.is_active,
-            sku_count=sku_count,
+            sku_count=total_sku_count,
             total_stock=total_stock,
             is_main_sku=product.is_main_sku,
             created_at=product.created_at
