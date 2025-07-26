@@ -70,6 +70,7 @@ class ProductSKU(Base):
     stock_movements = relationship("StockMovement", back_populates="sku")
     stock_sku = relationship("ProductSKU", remote_side=[id])  # SKU de estoque principal
     associated_skus = relationship("ProductSKU", back_populates="stock_sku")  # SKUs associados
+    branch_stocks = relationship("StockBranch", back_populates="sku")  # Estoque por filial
     
     def __repr__(self):
         return f"<ProductSKU(id={self.id}, sku_code='{self.sku_code}', product_id={self.product_id})>"

@@ -36,6 +36,7 @@ import Usuarios from "./pages/Usuarios";
 import Atendimento from "./pages/Atendimento";
 import Marketplace from "./pages/Marketplace";
 import Fornecedores from "./pages/Fornecedores";
+import Clientes from "./pages/Clientes";
 import PlanDetails from "./pages/PlanDetails";
 
 const queryClient = new QueryClient();
@@ -156,6 +157,11 @@ const App = () => (
               } />
               
               {/* Módulo de Gestão */}
+              <Route path="clientes" element={
+                <ProtectedRoute requiredModules={['CLIENTES']}>
+                  <Clientes />
+                </ProtectedRoute>
+              } />
               <Route path="usuarios" element={
                 <ProtectedRoute requiredModules={['users']} requiredPermissions={['users:read']}>
                   <Usuarios />
@@ -243,6 +249,11 @@ const App = () => (
             <Route path="/fornecedores" element={
               <ProtectedRoute requiredModules={['suppliers']}>
                 <Layout><Fornecedores /></Layout>
+              </ProtectedRoute>
+            } />
+            <Route path="/clientes" element={
+              <ProtectedRoute requiredModules={['CLIENTES']}>
+                <Layout><Clientes /></Layout>
               </ProtectedRoute>
             } />
             

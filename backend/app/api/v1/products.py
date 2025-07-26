@@ -8,6 +8,7 @@ from app.core.database import get_db
 from ..v1.auth import get_current_user
 from app.models.product import Product
 from app.models.product_sku import ProductSKU
+from app.models.stock_branch import StockBranch
 from app.models.stock_movement import StockMovement, MovementType, MovementReason
 from app.models.user import User
 from app.schemas.product import (
@@ -15,6 +16,9 @@ from app.schemas.product import (
     ProductSKUCreate, ProductSKUUpdate, ProductSKUResponse, ProductSKUList,
     StockMovementCreate, StockMovementResponse, StockMovementList,
     ProductFilter, ProductSKUFilter, StockMovementFilter
+)
+from app.schemas.stock_branch import (
+    StockBranchCreate, StockBranchUpdate, StockBranchResponse, StockBranchList
 )
 
 router = APIRouter()
@@ -911,4 +915,248 @@ def get_stock_status_report(
             "in_stock": in_stock
         },
         "total_stock_value": float(total_value)
-    } 
+    }
+
+# ==================== ESTOQUE POR FILIAL ====================
+
+@router.post("/skus/{sku_id}/branch-stock", response_model=StockBranchResponse, status_code=status.HTTP_201_CREATED)
+def create_sku_branch_stock(
+    sku_id: int,
+    stock_data: StockBranchCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Criar configuração de estoque para um SKU em uma filial específica"""
+    # Verificar se o SKU existe e pertence à empresa
+    sku = db.query(ProductSKU).join(Product).filter(
+        and_(
+            ProductSKU.id == sku_id,
+            Product.company_id == current_user.company_id
+        )
+    ).first()
+    
+    if not sku:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="SKU não encontrado"
+        )
+    
+    # Verificar se a filial pertence à empresa
+    from app.models.company import Branch
+    branch = db.query(Branch).filter(
+        and_(
+            Branch.id == stock_data.branch_id,
+            Branch.company_id == current_user.company_id
+        )
+    ).first()
+    
+    if not branch:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Filial não encontrada"
+        )
+    
+    # Verificar se já existe configuração para este SKU nesta filial
+    existing_stock = db.query(StockBranch).filter(
+        and_(
+            StockBranch.sku_id == sku_id,
+            StockBranch.branch_id == stock_data.branch_id
+        )
+    ).first()
+    
+    if existing_stock:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Já existe configuração de estoque para este SKU nesta filial"
+        )
+    
+    # Criar configuração de estoque
+    db_stock = StockBranch(
+        sku_id=sku_id,
+        branch_id=stock_data.branch_id,
+        current_stock=stock_data.current_stock,
+        minimum_stock=stock_data.minimum_stock,
+        maximum_stock=stock_data.maximum_stock,
+        reserved_stock=stock_data.reserved_stock,
+        warehouse_location=stock_data.warehouse_location,
+        shelf_location=stock_data.shelf_location,
+        notes=stock_data.notes,
+        is_active=stock_data.is_active
+    )
+    
+    db.add(db_stock)
+    db.commit()
+    db.refresh(db_stock)
+    
+    return db_stock
+
+@router.get("/skus/{sku_id}/branch-stock", response_model=List[StockBranchList])
+def get_sku_branch_stock(
+    sku_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Listar configurações de estoque de um SKU em todas as filiais"""
+    # Verificar se o SKU existe e pertence à empresa
+    sku = db.query(ProductSKU).join(Product).filter(
+        and_(
+            ProductSKU.id == sku_id,
+            Product.company_id == current_user.company_id
+        )
+    ).first()
+    
+    if not sku:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="SKU não encontrado"
+        )
+    
+    # Buscar configurações de estoque por filial
+    from app.models.company import Branch
+    stock_branches = db.query(StockBranch, Branch.name.label('branch_name')).join(
+        Branch, StockBranch.branch_id == Branch.id
+    ).filter(
+        and_(
+            StockBranch.sku_id == sku_id,
+            Branch.company_id == current_user.company_id
+        )
+    ).all()
+    
+    result = []
+    for stock_branch, branch_name in stock_branches:
+        result.append(StockBranchList(
+            id=stock_branch.id,
+            sku_id=stock_branch.sku_id,
+            branch_id=stock_branch.branch_id,
+            branch_name=branch_name,
+            current_stock=stock_branch.current_stock,
+            minimum_stock=stock_branch.minimum_stock,
+            maximum_stock=stock_branch.maximum_stock,
+            available_stock=stock_branch.available_stock,
+            stock_status=stock_branch.stock_status,
+            warehouse_location=stock_branch.warehouse_location,
+            is_active=stock_branch.is_active,
+            created_at=stock_branch.created_at
+        ))
+    
+    return result
+
+@router.put("/skus/{sku_id}/branch-stock/{branch_id}", response_model=StockBranchResponse)
+def update_sku_branch_stock(
+    sku_id: int,
+    branch_id: str,
+    stock_update: StockBranchUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Atualizar configuração de estoque de um SKU em uma filial específica"""
+    from app.models.company import Branch
+    from uuid import UUID
+    
+    # Verificar se o SKU existe e pertence à empresa
+    sku = db.query(ProductSKU).join(Product).filter(
+        and_(
+            ProductSKU.id == sku_id,
+            Product.company_id == current_user.company_id
+        )
+    ).first()
+    
+    if not sku:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="SKU não encontrado"
+        )
+    
+    # Verificar se a filial pertence à empresa
+    branch = db.query(Branch).filter(
+        and_(
+            Branch.id == UUID(branch_id),
+            Branch.company_id == current_user.company_id
+        )
+    ).first()
+    
+    if not branch:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Filial não encontrada"
+        )
+    
+    # Buscar configuração de estoque
+    stock_branch = db.query(StockBranch).filter(
+        and_(
+            StockBranch.sku_id == sku_id,
+            StockBranch.branch_id == UUID(branch_id)
+        )
+    ).first()
+    
+    if not stock_branch:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Configuração de estoque não encontrada"
+        )
+    
+    # Atualizar campos
+    update_data = stock_update.dict(exclude_unset=True)
+    for field, value in update_data.items():
+        setattr(stock_branch, field, value)
+    
+    db.commit()
+    db.refresh(stock_branch)
+    
+    return stock_branch
+
+@router.delete("/skus/{sku_id}/branch-stock/{branch_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_sku_branch_stock(
+    sku_id: int,
+    branch_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Remover configuração de estoque de um SKU em uma filial específica"""
+    from app.models.company import Branch
+    from uuid import UUID
+    
+    # Verificar se o SKU existe e pertence à empresa
+    sku = db.query(ProductSKU).join(Product).filter(
+        and_(
+            ProductSKU.id == sku_id,
+            Product.company_id == current_user.company_id
+        )
+    ).first()
+    
+    if not sku:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="SKU não encontrado"
+        )
+    
+    # Verificar se a filial pertence à empresa
+    branch = db.query(Branch).filter(
+        and_(
+            Branch.id == UUID(branch_id),
+            Branch.company_id == current_user.company_id
+        )
+    ).first()
+    
+    if not branch:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Filial não encontrada"
+        )
+    
+    # Buscar e remover configuração de estoque
+    stock_branch = db.query(StockBranch).filter(
+        and_(
+            StockBranch.sku_id == sku_id,
+            StockBranch.branch_id == UUID(branch_id)
+        )
+    ).first()
+    
+    if not stock_branch:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Configuração de estoque não encontrada"
+        )
+    
+    db.delete(stock_branch)
+    db.commit() 

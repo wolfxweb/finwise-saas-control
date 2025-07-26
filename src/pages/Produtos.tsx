@@ -119,6 +119,35 @@ interface ProductSKU {
   updated_at: string;
 }
 
+interface StockBranch {
+  id: number;
+  sku_id: number;
+  branch_id: string;
+  branch_name: string;
+  current_stock: number;
+  minimum_stock: number;
+  maximum_stock?: number;
+  reserved_stock: number;
+  available_stock: number;
+  stock_status: string;
+  warehouse_location?: string;
+  shelf_location?: string;
+  notes?: string;
+  is_active: boolean;
+  created_at: string;
+}
+
+interface Branch {
+  id: string;
+  name: string;
+  cnpj: string;
+  address?: string;
+  city?: string;
+  state?: string;
+  zip_code?: string;
+  status: string;
+}
+
 interface Supplier {
   id: string;
   name: string;
@@ -235,6 +264,13 @@ export default function Produtos() {
   const [skuAssociationSearchTerm, setSkuAssociationSearchTerm] = useState("");
   const [filteredSkuAssociations, setFilteredSkuAssociations] = useState<ProductListItem[]>([]);
   const [activeSkuTab, setActiveSkuTab] = useState<string>("current");
+  
+  // Estados para estoque por filial
+  const [branches, setBranches] = useState<Branch[]>([]);
+  const [stockBranches, setStockBranches] = useState<StockBranch[]>([]);
+  const [selectedBranchForStock, setSelectedBranchForStock] = useState<string>("");
+  const [activeStockTab, setActiveStockTab] = useState("overview");
+  
   const [newSku, setNewSku] = useState({
     sku_code: "",
     barcode: "",
@@ -259,6 +295,7 @@ export default function Produtos() {
     loadProducts();
     loadSuppliers();
     loadCategories();
+    loadBranches();
   }, []);
 
   const loadProducts = async () => {
@@ -298,6 +335,24 @@ export default function Produtos() {
       setCategories(response.data || []);
     } catch (error) {
       console.error("Erro ao carregar categorias:", error);
+    }
+  };
+
+  const loadBranches = async () => {
+    try {
+      const response = await api.get("/api/v1/company/branches/");
+      setBranches(response.data || []);
+    } catch (error) {
+      console.error("Erro ao carregar filiais:", error);
+    }
+  };
+
+  const loadStockBranches = async (skuId: number) => {
+    try {
+      const response = await api.get(`/api/v1/products/skus/${skuId}/branch-stock`);
+      setStockBranches(response.data || []);
+    } catch (error) {
+      console.error("Erro ao carregar estoque por filial:", error);
     }
   };
 
@@ -1258,10 +1313,11 @@ export default function Produtos() {
           </DialogHeader>
 
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <TabsList className="grid w-full grid-cols-6">
+            <TabsList className="grid w-full grid-cols-7">
               <TabsTrigger value="basic">Básicas</TabsTrigger>
               <TabsTrigger value="dimensions">Dimensões</TabsTrigger>
               <TabsTrigger value="fiscal">Fiscais</TabsTrigger>
+              <TabsTrigger value="stock">Estoque</TabsTrigger>
               <TabsTrigger value="skus">SKUs</TabsTrigger>
               <TabsTrigger value="components" disabled={formData.product_type !== "composite"}>Composição</TabsTrigger>
               <TabsTrigger value="marketplace">Marketplace</TabsTrigger>
@@ -1448,6 +1504,256 @@ export default function Produtos() {
                   </div>
                 </div>
               </div>
+            </TabsContent>
+
+            <TabsContent value="stock" className="space-y-6">
+              <div className="flex justify-between items-center">
+                <h3 className="text-lg font-semibold">Configurações de Estoque</h3>
+              </div>
+
+              <Tabs value={activeStockTab} onValueChange={setActiveStockTab} className="w-full">
+                <TabsList className="mb-4">
+                  <TabsTrigger value="overview">Visão Geral</TabsTrigger>
+                  <TabsTrigger value="branch-stock">Estoque por Filial</TabsTrigger>
+                </TabsList>
+                
+                <TabsContent value="overview">
+                  {/* Configurações Gerais de Estoque */}
+                  <div className="space-y-4">
+                    <h4 className="text-md font-medium mb-4">Configurações Gerais</h4>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <Label htmlFor="location">Localização no Armazém</Label>
+                        <Input
+                          id="location"
+                          value={formData.location || ''}
+                          onChange={(e) => setFormData({ ...formData, location: e.target.value })}
+                          placeholder="Ex: Prateleira A1, Setor B"
+                          disabled={isViewMode}
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="reserved_stock">Estoque Reservado</Label>
+                        <Input
+                          id="reserved_stock"
+                          type="number"
+                          min="0"
+                          value={formData.reserved_stock || ''}
+                          onChange={(e) => setFormData({ ...formData, reserved_stock: parseInt(e.target.value) || 0 })}
+                          placeholder="0"
+                          disabled={isViewMode}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Configurações de Estoque por SKU */}
+                  <div className="space-y-4">
+                    <h4 className="text-md font-medium mb-4">Configurações por SKU</h4>
+                    {skus.length === 0 ? (
+                      <div className="text-center py-8">
+                        <Package className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                        <h3 className="text-lg font-semibold mb-2">Nenhum SKU Configurado</h3>
+                        <p className="text-muted-foreground">
+                          Configure os SKUs na aba SKUs para definir as quantidades mínimas e máximas.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        {skus.map((sku, index) => (
+                          <Card key={index}>
+                            <CardHeader>
+                              <CardTitle className="text-sm">{sku.sku_code}</CardTitle>
+                              <CardDescription>
+                                {sku.is_stock_sku ? 'SKU Principal' : 'SKU Associado'}
+                              </CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                              <div className="grid grid-cols-3 gap-4">
+                                <div>
+                                  <Label htmlFor={`min_stock_${index}`}>Estoque Mínimo</Label>
+                                  <Input
+                                    id={`min_stock_${index}`}
+                                    type="number"
+                                    min="0"
+                                    value={sku.min_stock || ''}
+                                    onChange={(e) => {
+                                      const newSkus = [...skus];
+                                      newSkus[index].min_stock = parseInt(e.target.value) || 0;
+                                      setSkus(newSkus);
+                                    }}
+                                    placeholder="0"
+                                    disabled={isViewMode}
+                                  />
+                                </div>
+                                <div>
+                                  <Label htmlFor={`max_stock_${index}`}>Estoque Máximo</Label>
+                                  <Input
+                                    id={`max_stock_${index}`}
+                                    type="number"
+                                    min="0"
+                                    value={sku.max_stock || ''}
+                                    onChange={(e) => {
+                                      const newSkus = [...skus];
+                                      newSkus[index].max_stock = parseInt(e.target.value) || 0;
+                                      setSkus(newSkus);
+                                    }}
+                                    placeholder="0"
+                                    disabled={isViewMode}
+                                  />
+                                </div>
+                                <div>
+                                  <Label htmlFor={`current_stock_${index}`}>Estoque Atual</Label>
+                                  <Input
+                                    id={`current_stock_${index}`}
+                                    type="number"
+                                    min="0"
+                                    value={sku.current_stock || ''}
+                                    onChange={(e) => {
+                                      const newSkus = [...skus];
+                                      newSkus[index].current_stock = parseInt(e.target.value) || 0;
+                                      setSkus(newSkus);
+                                    }}
+                                    placeholder="0"
+                                    disabled={isViewMode}
+                                  />
+                                </div>
+                              </div>
+                              <div className="mt-4">
+                                <Label htmlFor={`warehouse_location_${index}`}>Localização no Armazém</Label>
+                                <Input
+                                  id={`warehouse_location_${index}`}
+                                  value={sku.location || ''}
+                                  onChange={(e) => {
+                                    const newSkus = [...skus];
+                                    newSkus[index].location = e.target.value;
+                                    setSkus(newSkus);
+                                  }}
+                                  placeholder="Ex: Prateleira A1, Setor B"
+                                  disabled={isViewMode}
+                                />
+                              </div>
+                            </CardContent>
+                          </Card>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Alertas de Estoque */}
+                  <div className="space-y-4">
+                    <h4 className="text-md font-medium mb-4">Alertas de Estoque</h4>
+                    <div className="grid grid-cols-2 gap-4">
+                      <Card>
+                        <CardHeader>
+                          <CardTitle className="text-sm">Estoque Baixo</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="text-2xl font-bold text-warning">
+                            {skus.filter(sku => (sku.current_stock || 0) <= (sku.min_stock || 0)).length}
+                          </div>
+                          <p className="text-xs text-muted-foreground">SKUs com estoque abaixo do mínimo</p>
+                        </CardContent>
+                      </Card>
+                      <Card>
+                        <CardHeader>
+                          <CardTitle className="text-sm">Estoque Alto</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="text-2xl font-bold text-success">
+                            {skus.filter(sku => (sku.current_stock || 0) >= (sku.max_stock || 999999)).length}
+                          </div>
+                          <p className="text-xs text-muted-foreground">SKUs com estoque acima do máximo</p>
+                        </CardContent>
+                      </Card>
+                    </div>
+                  </div>
+                </TabsContent>
+                
+                <TabsContent value="branch-stock">
+                  <div className="space-y-4">
+                    <h4 className="text-md font-medium mb-4">Estoque por Filial</h4>
+                    
+                    {skus.length === 0 ? (
+                      <div className="text-center py-8">
+                        <Package className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                        <h3 className="text-lg font-semibold mb-2">Nenhum SKU Configurado</h3>
+                        <p className="text-muted-foreground">
+                          Configure os SKUs na aba SKUs para gerenciar estoque por filial.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        {skus.map((sku, index) => (
+                          <Card key={index}>
+                            <CardHeader>
+                              <CardTitle className="text-sm">{sku.sku_code}</CardTitle>
+                              <CardDescription>
+                                {sku.is_stock_sku ? 'SKU Principal' : 'SKU Associado'}
+                              </CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                              <div className="space-y-4">
+                                <div className="flex justify-between items-center">
+                                  <h5 className="font-medium">Configurações por Filial</h5>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => loadStockBranches(parseInt(sku.id))}
+                                    disabled={isViewMode}
+                                  >
+                                    Carregar Estoque por Filial
+                                  </Button>
+                                </div>
+                                
+                                {stockBranches.filter(sb => sb.sku_id === parseInt(sku.id)).length > 0 ? (
+                                  <div className="space-y-2">
+                                    {stockBranches
+                                      .filter(sb => sb.sku_id === parseInt(sku.id))
+                                      .map((stockBranch) => (
+                                        <div key={stockBranch.id} className="border rounded-lg p-3">
+                                          <div className="flex justify-between items-start mb-2">
+                                            <h6 className="font-medium">{stockBranch.branch_name}</h6>
+                                            <Badge variant={stockBranch.stock_status === 'low_stock' ? 'destructive' : stockBranch.stock_status === 'high_stock' ? 'default' : 'secondary'}>
+                                              {stockBranch.stock_status === 'low_stock' ? 'Baixo' : stockBranch.stock_status === 'high_stock' ? 'Alto' : 'Normal'}
+                                            </Badge>
+                                          </div>
+                                          <div className="grid grid-cols-4 gap-2 text-sm">
+                                            <div>
+                                              <span className="text-muted-foreground">Atual:</span> {stockBranch.current_stock}
+                                            </div>
+                                            <div>
+                                              <span className="text-muted-foreground">Mín:</span> {stockBranch.minimum_stock}
+                                            </div>
+                                            <div>
+                                              <span className="text-muted-foreground">Máx:</span> {stockBranch.maximum_stock || '-'}
+                                            </div>
+                                            <div>
+                                              <span className="text-muted-foreground">Disponível:</span> {stockBranch.available_stock}
+                                            </div>
+                                          </div>
+                                          {stockBranch.warehouse_location && (
+                                            <div className="text-xs text-muted-foreground mt-1">
+                                              Localização: {stockBranch.warehouse_location}
+                                            </div>
+                                          )}
+                                        </div>
+                                      ))}
+                                  </div>
+                                ) : (
+                                  <div className="text-center py-4 text-muted-foreground">
+                                    Nenhuma configuração de estoque por filial encontrada.
+                                  </div>
+                                )}
+                              </div>
+                            </CardContent>
+                          </Card>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </TabsContent>
+              </Tabs>
             </TabsContent>
 
             <TabsContent value="skus" className="space-y-6">

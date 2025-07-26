@@ -89,6 +89,13 @@ def init_modules():
                 "category": "Comercial"
             },
             {
+                "name": "Gestão de Clientes",
+                "code": "CLIENTES",
+                "description": "Cadastro e gestão completa de clientes com controle de crédito e histórico",
+                "price": 30.00,
+                "category": "Comercial"
+            },
+            {
                 "name": "Expedição e Logística",
                 "code": "EXPEDICAO",
                 "description": "Controle de expedição, rastreamento e logística",

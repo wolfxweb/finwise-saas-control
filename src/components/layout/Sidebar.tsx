@@ -124,6 +124,12 @@ const menuItems: MenuItem[] = [
     module: "invoice",
   },
   {
+    title: "Clientes",
+    href: "/app/clientes",
+    icon: Users,
+    module: "CLIENTES",
+  },
+  {
     title: "Usuários",
     href: "/app/usuarios",
     icon: UserCheck,
