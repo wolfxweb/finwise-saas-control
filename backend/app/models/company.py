@@ -5,6 +5,11 @@ from sqlalchemy.orm import relationship
 from ..core.database import Base
 import uuid
 
+# Importar modelos para resolver relacionamentos
+from .nota_fiscal import NotaFiscal
+from .product import Product
+from .category import Category
+
 class Company(Base):
     __tablename__ = "companies"
     
@@ -27,6 +32,8 @@ class Company(Base):
     users = relationship("User", back_populates="company")
     branches = relationship("Branch", back_populates="company")
     notas_fiscais = relationship("NotaFiscal", back_populates="company")
+    products = relationship("Product", back_populates="company")
+    categories = relationship("Category", back_populates="company")
 
 class Branch(Base):
     __tablename__ = "branches"
