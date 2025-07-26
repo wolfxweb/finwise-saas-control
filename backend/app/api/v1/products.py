@@ -418,11 +418,11 @@ def associate_product_skus(
             detail="Produto não encontrado"
         )
     
-    # Buscar SKUs dos produtos associados
+    # Buscar SKUs dos produtos associados (que não são SKU principal)
     associated_skus = db.query(ProductSKU).filter(
         and_(
             ProductSKU.product_id.in_(associated_product_ids),
-            ProductSKU.is_stock_sku == True,  # Apenas SKUs de estoque
+            ProductSKU.is_stock_sku == False,  # SKUs que não são principais
             ProductSKU.is_active == True
         )
     ).all()
