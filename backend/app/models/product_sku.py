@@ -81,10 +81,14 @@ class ProductSKU(Base):
         if not self.is_stock_sku and self.stock_sku_id:
             stock_sku = self.stock_sku
             if stock_sku:
-                return max(0, stock_sku.current_stock - stock_sku.reserved_stock)
+                current = stock_sku.current_stock or 0
+                reserved = stock_sku.reserved_stock or 0
+                return max(0, current - reserved)
         
         # Se é o SKU principal ou não tem associação
-        return max(0, self.current_stock - self.reserved_stock)
+        current = self.current_stock or 0
+        reserved = self.reserved_stock or 0
+        return max(0, current - reserved)
     
     @property
     def stock_status(self):

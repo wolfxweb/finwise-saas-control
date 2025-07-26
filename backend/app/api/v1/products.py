@@ -118,12 +118,16 @@ def get_products(
         query = query.filter(Product.is_service == is_service)
     
     # Contar SKUs e estoque total
-    products = query.offset(skip).limit(limit).all()
+    products = query.options(joinedload(Product.skus)).offset(skip).limit(limit).all()
     
     result = []
     for product in products:
-        sku_count = len(product.skus)
-        total_stock = sum(sku.current_stock for sku in product.skus)
+        # Filtrar apenas SKUs ativos
+        active_skus = [sku for sku in product.skus if sku.is_active]
+        sku_count = len(active_skus)
+        total_stock = sum(sku.current_stock for sku in active_skus)
+        
+
         
         result.append(ProductList(
             id=product.id,
@@ -134,6 +138,7 @@ def get_products(
             is_active=product.is_active,
             sku_count=sku_count,
             total_stock=total_stock,
+            is_main_sku=product.is_main_sku,
             created_at=product.created_at
         ))
     
@@ -317,6 +322,83 @@ def create_product_sku(
     
     return db_sku
 
+@router.post("/{product_id}/associate-skus", status_code=status.HTTP_200_OK)
+def associate_product_skus(
+    product_id: int,
+    associated_product_ids: List[int],
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Associar SKUs de outros produtos a este produto"""
+    # Verificar se o produto existe e pertence à empresa
+    product = db.query(Product).filter(
+        and_(
+            Product.id == product_id,
+            Product.company_id == current_user.company_id
+        )
+    ).first()
+    
+    if not product:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Produto não encontrado"
+        )
+    
+    # Buscar SKUs dos produtos associados
+    associated_skus = db.query(ProductSKU).filter(
+        and_(
+            ProductSKU.product_id.in_(associated_product_ids),
+            ProductSKU.is_stock_sku == True,  # Apenas SKUs de estoque
+            ProductSKU.is_active == True
+        )
+    ).all()
+    
+    # Criar SKUs associados para o produto atual
+    created_skus = []
+    for stock_sku in associated_skus:
+        # Verificar se já existe um SKU associado para este stock_sku
+        existing_associated = db.query(ProductSKU).filter(
+            and_(
+                ProductSKU.product_id == product_id,
+                ProductSKU.stock_sku_id == stock_sku.id,
+                ProductSKU.is_stock_sku == False
+            )
+        ).first()
+        
+        if not existing_associated:
+            # Criar novo SKU associado
+            associated_sku = ProductSKU(
+                product_id=product_id,
+                sku_code=f"{product.name}_{stock_sku.sku_code}",
+                barcode=stock_sku.barcode,
+                color=stock_sku.color,
+                size=stock_sku.size,
+                material=stock_sku.material,
+                flavor=stock_sku.flavor,
+                cost_price=stock_sku.cost_price,
+                sale_price=stock_sku.sale_price,
+                current_stock=0,  # Estoque compartilhado
+                minimum_stock=stock_sku.minimum_stock,
+                maximum_stock=stock_sku.maximum_stock,
+                reserved_stock=0,
+                warehouse_location=stock_sku.warehouse_location,
+                taxes=stock_sku.taxes,
+                supplier_id=stock_sku.supplier_id,
+                is_stock_sku=False,
+                stock_sku_id=stock_sku.id,
+                is_active=True,
+                is_available_for_sale=True
+            )
+            db.add(associated_sku)
+            created_skus.append(associated_sku)
+    
+    db.commit()
+    
+    return {
+        "message": f"Associados {len(created_skus)} SKUs ao produto",
+        "created_skus": len(created_skus)
+    }
+
 @router.get("/{product_id}/skus", response_model=List[ProductSKUList])
 def get_product_skus(
     product_id: int,
@@ -477,6 +559,45 @@ def update_sku(
     db.refresh(db_sku)
     
     return db_sku
+
+@router.delete("/skus/{sku_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_sku(
+    sku_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Deletar SKU"""
+    db_sku = db.query(ProductSKU).join(Product).filter(
+        and_(
+            ProductSKU.id == sku_id,
+            Product.company_id == current_user.company_id
+        )
+    ).first()
+    
+    if not db_sku:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="SKU não encontrado"
+        )
+    
+    # Verificar se é um SKU principal de estoque
+    if db_sku.is_stock_sku:
+        # Verificar se há SKUs associados a este SKU de estoque
+        associated_skus = db.query(ProductSKU).filter(
+            ProductSKU.stock_sku_id == sku_id
+        ).count()
+        
+        if associated_skus > 0:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Não é possível remover um SKU de estoque que possui SKUs associados"
+            )
+    
+    # Soft delete - apenas desativar
+    db_sku.is_active = False
+    db.commit()
+    
+    return None
 
 # ==================== MOVIMENTAÇÕES DE ESTOQUE ====================
 

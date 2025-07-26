@@ -11,6 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
+import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import { api } from "@/services/api";
 
@@ -25,6 +26,7 @@ interface ProductListItem {
   sku_count: number;
   total_stock: number;
   created_at: string;
+  is_main_sku?: boolean;
 }
 
 // Interface completa para produtos (usada no modal de edição)
@@ -232,6 +234,7 @@ export default function Produtos() {
   const [skuAssociations, setSkuAssociations] = useState<ProductListItem[]>([]);
   const [skuAssociationSearchTerm, setSkuAssociationSearchTerm] = useState("");
   const [filteredSkuAssociations, setFilteredSkuAssociations] = useState<ProductListItem[]>([]);
+  const [activeSkuTab, setActiveSkuTab] = useState<string>("current");
   const [newSku, setNewSku] = useState({
     sku_code: "",
     barcode: "",
@@ -647,6 +650,13 @@ export default function Produtos() {
       if (editingProduct) {
         // Update existing product
         await api.put(`/api/v1/products/${editingProduct.id}`, formData);
+        
+        // Salvar associações de SKU se houver
+        if (skuAssociations.length > 0) {
+          const associatedProductIds = skuAssociations.map(assoc => assoc.id);
+          await api.post(`/api/v1/products/${editingProduct.id}/associate-skus`, associatedProductIds);
+        }
+        
         toast({
           title: "Sucesso",
           description: "Produto atualizado com sucesso",
@@ -720,8 +730,38 @@ export default function Produtos() {
     });
   };
 
-  const removeSku = (index: number) => {
-    setSkus(skus.filter((_, i) => i !== index));
+  const removeSku = async (index: number) => {
+    const sku = skus[index];
+    // Se o SKU já existe no backend (id numérico), faz DELETE
+    if (sku.id && !isNaN(Number(sku.id))) {
+      try {
+        await api.delete(`/api/v1/products/skus/${sku.id}`);
+        toast({
+          title: "SKU removido",
+          description: "SKU removido com sucesso",
+        });
+        // Recarregar os dados do produto para atualizar a lista
+        if (editingProduct) {
+          const response = await api.get(`/api/v1/products/${editingProduct.id}`);
+          setSkus(response.data.skus || []);
+        }
+      } catch (error: any) {
+        console.error("Erro ao remover SKU:", error);
+        toast({
+          title: "Erro",
+          description: error.response?.data?.detail || "Erro ao remover SKU",
+          variant: "destructive"
+        });
+        return;
+      }
+    } else {
+      // Remove do estado local (SKU novo)
+      setSkus((prev) => prev.filter((_, i) => i !== index));
+      toast({
+        title: "SKU removido",
+        description: "SKU removido da lista",
+      });
+    }
   };
 
   const getStockStatus = (sku: ProductSKU) => {
@@ -822,6 +862,7 @@ export default function Produtos() {
     
     const filtered = products.filter(product => 
       product.name.toLowerCase().includes(searchTerm.toLowerCase()) &&
+      !product.is_main_sku && // Apenas produtos que NÃO são SKU principal
       !skuAssociations.some(assoc => assoc.id === product.id)
     );
     setFilteredSkuAssociations(filtered);
@@ -1215,13 +1256,12 @@ export default function Produtos() {
           </DialogHeader>
 
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <TabsList className="grid w-full grid-cols-7">
+            <TabsList className="grid w-full grid-cols-6">
               <TabsTrigger value="basic">Básicas</TabsTrigger>
               <TabsTrigger value="dimensions">Dimensões</TabsTrigger>
               <TabsTrigger value="fiscal">Fiscais</TabsTrigger>
-              <TabsTrigger value="skus">Estoque</TabsTrigger>
+              <TabsTrigger value="skus">SKUs</TabsTrigger>
               <TabsTrigger value="components" disabled={formData.product_type !== "composite"}>Composição</TabsTrigger>
-              <TabsTrigger value="sku-associations" disabled={!formData.is_main_sku}>SKUs</TabsTrigger>
               <TabsTrigger value="marketplace">Marketplace</TabsTrigger>
             </TabsList>
 
@@ -1397,7 +1437,7 @@ export default function Produtos() {
                       onCheckedChange={(checked) => {
                         setFormData({...formData, is_main_sku: checked});
                         // Se desativar SKU Principal e estiver na aba SKUs, mudar para aba Básicas
-                        if (!checked && activeTab === "sku-associations") {
+                        if (!checked && activeTab === "skus") {
                           setActiveTab("basic");
                         }
                       }}
@@ -1409,221 +1449,216 @@ export default function Produtos() {
             </TabsContent>
 
             <TabsContent value="skus" className="space-y-6">
-              <div className="flex justify-between items-center">
-                <h3 className="text-lg font-semibold">Controle de Estoque</h3>
-              </div>
-
-              {/* Preços e Estoque */}
-              <div>
-                <h4 className="text-md font-medium mb-4">Preços e Estoque</h4>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="cost_price">Preço de Custo</Label>
-                    <Input
-                      id="cost_price"
-                      type="number"
-                      step="0.01"
-                      value={formData.cost_price || ''}
-                      onChange={(e) => setFormData({ ...formData, cost_price: parseFloat(e.target.value) || 0 })}
-                      placeholder="0.00"
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="sale_price">Preço de Venda</Label>
-                    <Input
-                      id="sale_price"
-                      type="number"
-                      step="0.01"
-                      value={formData.sale_price || ''}
-                      onChange={(e) => setFormData({ ...formData, sale_price: parseFloat(e.target.value) || 0 })}
-                      placeholder="0.00"
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="current_stock">Estoque Atual</Label>
-                    <Input
-                      id="current_stock"
-                      type="number"
-                      value={formData.current_stock || ''}
-                      onChange={(e) => setFormData({ ...formData, current_stock: parseInt(e.target.value) || 0 })}
-                      placeholder="0"
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="location">Localização</Label>
-                    <Input
-                      id="location"
-                      value={formData.location || ''}
-                      onChange={(e) => setFormData({ ...formData, location: e.target.value })}
-                      placeholder="Localização no estoque"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Controle de Estoque */}
-              <div>
-                <h4 className="text-md font-medium mb-4">Controle de Estoque</h4>
-                <div className="grid grid-cols-3 gap-4">
-                  <div>
-                    <Label htmlFor="min_stock">Estoque Mínimo</Label>
-                    <Input
-                      id="min_stock"
-                      type="number"
-                      value={formData.min_stock || ''}
-                      onChange={(e) => setFormData({ ...formData, min_stock: parseInt(e.target.value) || 0 })}
-                      placeholder="0"
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="max_stock">Estoque Máximo</Label>
-                    <Input
-                      id="max_stock"
-                      type="number"
-                      value={formData.max_stock || ''}
-                      onChange={(e) => setFormData({ ...formData, max_stock: parseInt(e.target.value) || 0 })}
-                      placeholder="0"
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="reserved_stock">Estoque Reservado</Label>
-                    <Input
-                      id="reserved_stock"
-                      type="number"
-                      value={formData.reserved_stock || ''}
-                      onChange={(e) => setFormData({ ...formData, reserved_stock: parseInt(e.target.value) || 0 })}
-                      placeholder="0"
-                    />
-                  </div>
-                </div>
-              </div>
-            </TabsContent>
-
-            <TabsContent value="sku-associations" className="space-y-6">
-              {!formData.is_main_sku ? (
-                <div className="text-center py-8">
-                  <Package className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                  <h3 className="text-lg font-semibold mb-2">Aba Desabilitada</h3>
-                  <p className="text-muted-foreground">
-                    Para associar SKUs de outros produtos, este produto deve ser marcado como "SKU Principal de Estoque" na aba Básicas.
-                  </p>
-                </div>
-              ) : (
-                <>
-                  <div className="flex justify-between items-center">
-                    <h3 className="text-lg font-semibold">Associar SKUs de Outros Produtos</h3>
-                  </div>
-
-              <div className="space-y-4">
-                <div>
-                  <h4 className="text-md font-medium mb-4">Pesquisar Produtos para Associar</h4>
-                  <div className="flex space-x-2">
-                    <Input
-                      placeholder="Digite o nome ou SKU do produto..."
-                      value={skuAssociationSearchTerm}
-                      onChange={(e) => {
-                        setSkuAssociationSearchTerm(e.target.value);
-                        filterSkuAssociations(e.target.value);
-                      }}
-                    />
-                    <Button
-                      variant="outline"
-                      onClick={() => {
-                        setSkuAssociationSearchTerm("");
-                        setFilteredSkuAssociations([]);
-                      }}
-                    >
-                      Limpar
-                    </Button>
-                  </div>
-                </div>
-
-                {/* Lista de produtos encontrados */}
-                {filteredSkuAssociations.length > 0 && (
-                  <div className="space-y-2">
-                    <h4 className="text-sm font-medium text-muted-foreground">Produtos Encontrados</h4>
-                    <div className="space-y-2">
-                      {filteredSkuAssociations.map((product) => (
-                        <Card key={product.id}>
-                          <CardContent className="p-4">
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center space-x-4">
-                                <div>
-                                  <div className="font-medium">{product.name}</div>
-                                  <div className="text-sm text-muted-foreground">
-                                    SKUs: {product.sku_count} | Categoria: {product.category || 'N/A'}
-                                  </div>
-                                </div>
-                                <div className="text-sm">
-                                  <div>Estoque: {product.total_stock} unidades</div>
-                                  <div>Status: {product.is_active ? 'Ativo' : 'Inativo'}</div>
-                                </div>
-                              </div>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => addSkuAssociation(product)}
-                              >
-                                <Plus className="h-4 w-4 mr-2" />
-                                Associar
-                              </Button>
-                            </div>
-                          </CardContent>
-                        </Card>
-                      ))}
+              <Tabs value={activeSkuTab} onValueChange={setActiveSkuTab} className="w-full">
+                <TabsList className="mb-4">
+                  <TabsTrigger value="current">SKUs do Produto</TabsTrigger>
+                  {formData.is_main_sku && (
+                    <TabsTrigger value="associate">Associar SKUs de Outros Produtos</TabsTrigger>
+                  )}
+                </TabsList>
+                
+                <TabsContent value="current">
+                  <div className="space-y-4">
+                    <div className="flex justify-between items-center">
+                      <h3 className="text-lg font-semibold">SKUs do Produto</h3>
+                      {!isViewMode && (
+                        <Button onClick={addSku} size="sm">
+                          <Plus className="h-4 w-4 mr-2" />
+                          Adicionar SKU
+                        </Button>
+                      )}
                     </div>
-                  </div>
-                )}
 
-                {/* Lista de produtos associados */}
-                {skuAssociations.length > 0 && (
-                  <div className="space-y-2">
-                    <h4 className="text-md font-medium">Produtos Associados</h4>
-                    <div className="space-y-2">
-                      {skuAssociations.map((product) => (
-                        <Card key={product.id}>
-                          <CardContent className="p-4">
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center space-x-4">
-                                <div>
-                                  <div className="font-medium">{product.name}</div>
-                                  <div className="text-sm text-muted-foreground">
-                                    SKUs: {product.sku_count} | Categoria: {product.category || 'N/A'}
+                    {skus.length === 0 ? (
+                      <div className="text-center py-8">
+                        <Package className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                        <h3 className="text-lg font-semibold mb-2">Nenhum SKU Cadastrado</h3>
+                        <p className="text-muted-foreground">
+                          {!isViewMode ? "Adicione SKUs para este produto usando o botão acima." : "Este produto não possui SKUs cadastrados."}
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        {skus.map((sku, index) => (
+                          <Card key={index}>
+                            <CardContent className="p-4">
+                              <div className="flex items-center justify-between">
+                                <div className="flex-1">
+                                  <div className="flex items-center space-x-2 mb-2">
+                                    <h4 className="font-medium">{sku.sku_code}</h4>
+                                    {sku.is_stock_sku && (
+                                      <Badge variant="default">SKU Principal</Badge>
+                                    )}
+                                    {sku.stock_sku_id && (
+                                      <Badge variant="outline">SKU Associado</Badge>
+                                    )}
                                   </div>
+                                  <div className="grid grid-cols-2 gap-4 text-sm text-muted-foreground">
+                                    <div>
+                                      <span className="font-medium">Preço de Custo:</span> R$ {sku.cost_price?.toFixed(2) || '0.00'}
+                                    </div>
+                                    <div>
+                                      <span className="font-medium">Preço de Venda:</span> R$ {sku.sale_price?.toFixed(2) || '0.00'}
+                                    </div>
+                                    <div>
+                                      <span className="font-medium">Estoque Atual:</span> {sku.current_stock || 0} unidades
+                                    </div>
+                                    <div>
+                                      <span className="font-medium">Estoque Mínimo:</span> {sku.min_stock || 0} unidades
+                                    </div>
+                                  </div>
+                                  {sku.stock_sku_id && (
+                                    <div className="mt-2 text-xs text-blue-600">
+                                      <span className="font-medium">Associado ao SKU ID:</span> {sku.stock_sku_id}
+                                    </div>
+                                  )}
                                 </div>
-                                <div className="text-sm">
-                                  <div>Estoque: {product.total_stock} unidades</div>
-                                  <div>Status: {product.is_active ? 'Ativo' : 'Inativo'}</div>
-                                </div>
-                                <Badge variant="outline">Associado</Badge>
+                                {!isViewMode && (
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => removeSku(index)}
+                                    className="text-red-600 hover:text-red-700"
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                )}
                               </div>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => removeSkuAssociation(product.id)}
-                                className="text-red-600 hover:text-red-700"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </div>
-                          </CardContent>
-                        </Card>
-                      ))}
+                            </CardContent>
+                          </Card>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </TabsContent>
+                
+                <TabsContent value="associate">
+                  {!formData.is_main_sku ? (
+                    <div className="text-center py-8">
+                      <Package className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                      <h3 className="text-lg font-semibold mb-2">Associação Desabilitada</h3>
+                      <p className="text-muted-foreground">
+                        Para associar SKUs de outros produtos, este produto deve ser marcado como "SKU Principal de Estoque" na aba Básicas.
+                      </p>
                     </div>
-                  </div>
-                )}
+                  ) : (
+                    <>
+                      <div className="flex justify-between items-center">
+                        <h3 className="text-lg font-semibold">Associar SKUs de Outros Produtos</h3>
+                      </div>
 
-                {skuAssociations.length === 0 && filteredSkuAssociations.length === 0 && (
-                  <div className="text-center py-8">
-                    <Package className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                    <p className="text-muted-foreground">
-                      Nenhum produto associado. Use a pesquisa acima para encontrar produtos que não são SKU principal de estoque.
-                    </p>
-                  </div>
-                )}
-              </div>
-                </>
-              )}
+                      <div className="space-y-4">
+                        <div>
+                          <h4 className="text-md font-medium mb-4">Pesquisar Produtos para Associar</h4>
+                          <div className="flex space-x-2">
+                            <Input
+                              placeholder="Digite o nome ou SKU do produto..."
+                              value={skuAssociationSearchTerm}
+                              onChange={(e) => {
+                                setSkuAssociationSearchTerm(e.target.value);
+                                filterSkuAssociations(e.target.value);
+                              }}
+                            />
+                            <Button
+                              variant="outline"
+                              onClick={() => {
+                                setSkuAssociationSearchTerm("");
+                                setFilteredSkuAssociations([]);
+                              }}
+                            >
+                              Limpar
+                            </Button>
+                          </div>
+                        </div>
+
+                        {/* Lista de produtos encontrados */}
+                        {filteredSkuAssociations.length > 0 && (
+                          <div className="space-y-2">
+                            <h4 className="text-sm font-medium text-muted-foreground">Produtos Encontrados</h4>
+                            <div className="space-y-2">
+                              {filteredSkuAssociations.map((product) => (
+                                <Card key={product.id}>
+                                  <CardContent className="p-4">
+                                    <div className="flex items-center justify-between">
+                                      <div className="flex items-center space-x-4">
+                                        <div>
+                                          <div className="font-medium">{product.name}</div>
+                                          <div className="text-sm text-muted-foreground">
+                                            SKUs: {product.sku_count} | Categoria: {product.category || 'N/A'}
+                                          </div>
+                                        </div>
+                                        <div className="text-sm">
+                                          <div>Estoque: {product.total_stock} unidades</div>
+                                          <div>Status: {product.is_active ? 'Ativo' : 'Inativo'}</div>
+                                        </div>
+                                      </div>
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => addSkuAssociation(product)}
+                                      >
+                                        <Plus className="h-4 w-4 mr-2" />
+                                        Associar
+                                      </Button>
+                                    </div>
+                                  </CardContent>
+                                </Card>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Lista de produtos associados */}
+                        {skuAssociations.length > 0 && (
+                          <div className="space-y-2">
+                            <h4 className="text-md font-medium">Produtos Associados</h4>
+                            <div className="space-y-2">
+                              {skuAssociations.map((product) => (
+                                <Card key={product.id}>
+                                  <CardContent className="p-4">
+                                    <div className="flex items-center justify-between">
+                                      <div className="flex items-center space-x-4">
+                                        <div>
+                                          <div className="font-medium">{product.name}</div>
+                                          <div className="text-sm text-muted-foreground">
+                                            SKUs: {product.sku_count} | Categoria: {product.category || 'N/A'}
+                                          </div>
+                                        </div>
+                                        <div className="text-sm">
+                                          <div>Estoque: {product.total_stock} unidades</div>
+                                          <div>Status: {product.is_active ? 'Ativo' : 'Inativo'}</div>
+                                        </div>
+                                        <Badge variant="outline">Associado</Badge>
+                                      </div>
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => removeSkuAssociation(product.id)}
+                                        className="text-red-600 hover:text-red-700"
+                                      >
+                                        <Trash2 className="h-4 w-4" />
+                                      </Button>
+                                    </div>
+                                  </CardContent>
+                                </Card>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {skuAssociations.length === 0 && filteredSkuAssociations.length === 0 && (
+                          <div className="text-center py-8">
+                            <Package className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                            <p className="text-muted-foreground">
+                              Nenhum produto associado. Use a pesquisa acima para encontrar produtos que não são SKU principal de estoque.
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    </>
+                  )}
+                </TabsContent>
+              </Tabs>
             </TabsContent>
 
             <TabsContent value="fiscal" className="space-y-6">

@@ -309,8 +309,8 @@ class ProductSKUResponse(ProductSKUBase):
     product_id: int
     available_stock: int
     stock_status: str
-    total_tax_rate: float
-    price_with_taxes: float
+    total_tax_rate: float = 0.0
+    price_with_taxes: float = 0.0
     created_at: datetime
     updated_at: Optional[datetime] = None
     
@@ -353,6 +353,7 @@ class ProductList(BaseModel):
     is_active: bool
     sku_count: int
     total_stock: int
+    is_main_sku: Optional[bool] = False
     created_at: datetime
     
     class Config:
