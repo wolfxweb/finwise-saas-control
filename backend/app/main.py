@@ -16,7 +16,8 @@ from .models.stock_movement import StockMovement
 from .models.product_component import ProductComponent
 from .models.category import Category
 from .models.customer import Customer
-from .api.v1 import auth, admin, company, billing, suppliers, nota_fiscal, products, categories, customers
+from .models.accounts_receivable import AccountsReceivable
+from .api.v1 import auth, admin, company, billing, suppliers, nota_fiscal, products, categories, customers, accounts_receivable
 
 # Criar tabelas no banco de dados
 Base.metadata.create_all(bind=engine)
@@ -47,6 +48,7 @@ app.include_router(nota_fiscal.router, prefix=f"{settings.API_V1_STR}/notas-fisc
 app.include_router(products.router, prefix=f"{settings.API_V1_STR}/products", tags=["products"])
 app.include_router(categories.router, prefix=f"{settings.API_V1_STR}/categories", tags=["categories"])
 app.include_router(customers.router, prefix=f"{settings.API_V1_STR}/customers", tags=["customers"])
+app.include_router(accounts_receivable.router, prefix=f"{settings.API_V1_STR}/accounts-receivable", tags=["accounts-receivable"])
 
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
