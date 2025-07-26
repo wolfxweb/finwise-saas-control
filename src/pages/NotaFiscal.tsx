@@ -1815,10 +1815,10 @@ export default function NotaFiscal() {
               {/* Gráficos */}
                               <Tabs defaultValue="produtos" className="space-y-4">
                                                     <TabsList className="grid w-full grid-cols-3 md:grid-cols-5">
-                    <TabsTrigger value="produtos">Por Produtos</TabsTrigger>
+                  <TabsTrigger value="produtos">Por Produtos</TabsTrigger>
                   <TabsTrigger value="produtos_qtd">Por Qtd. Produtos</TabsTrigger>
                                               <TabsTrigger value="rentabilidade">Curva ABC</TabsTrigger>
-                                              <TabsTrigger value="temporal">Evolução Temporal</TabsTrigger>
+                  <TabsTrigger value="temporal">Evolução Temporal</TabsTrigger>
                   <TabsTrigger value="valor">Por Valor</TabsTrigger>
                 </TabsList>
 
@@ -1837,8 +1837,8 @@ export default function NotaFiscal() {
                           <p className="text-muted-foreground">Nenhum dado de produto disponível</p>
                         </div>
                       ) : (
-                        <ResponsiveContainer width="100%" height={400}>
-                          <BarChart data={dadosProdutos}>
+                      <ResponsiveContainer width="100%" height={400}>
+                        <BarChart data={dadosProdutos}>
                           <CartesianGrid strokeDasharray="3 3" />
                           <XAxis 
                             dataKey="descricao" 
@@ -2132,7 +2132,7 @@ export default function NotaFiscal() {
                           <p className="text-muted-foreground">Nenhum dado de produto disponível</p>
                         </div>
                       ) : (
-                        <ResponsiveContainer width="100%" height={400}>
+                      <ResponsiveContainer width="100%" height={400}>
                           <BarChart data={dadosProdutos}>
                           <CartesianGrid strokeDasharray="3 3" />
                           <XAxis 

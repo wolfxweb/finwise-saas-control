@@ -27,7 +27,7 @@ class Category(Base):
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     
     # Relacionamentos
-    company = relationship("Company", back_populates="categories")
+    company = relationship("Company")
     parent = relationship("Category", remote_side=[id], back_populates="children")
     children = relationship("Category", back_populates="parent")
     products = relationship("Product", back_populates="category_obj")

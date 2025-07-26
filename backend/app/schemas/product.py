@@ -60,6 +60,36 @@ class ProductBase(BaseModel):
     is_active: bool = True
     is_service: bool = False
     
+    # SKU principal
+    sku: Optional[str] = Field(None, max_length=50)
+    is_main_sku: Optional[bool] = False
+    
+    # Campos de Estoque
+    cost_price: Optional[float] = Field(None, ge=0)
+    sale_price: Optional[float] = Field(None, ge=0)
+    current_stock: Optional[int] = Field(None, ge=0)
+    location: Optional[str] = Field(None, max_length=100)
+    min_stock: Optional[int] = Field(None, ge=0)
+    max_stock: Optional[int] = Field(None, ge=0)
+    reserved_stock: Optional[int] = Field(None, ge=0)
+    
+    # Campos Fiscais
+    cest: Optional[str] = Field(None, max_length=20)
+    cfop: Optional[str] = Field(None, max_length=10)
+    icms_st: Optional[float] = Field(None, ge=0)
+    icms: Optional[float] = Field(None, ge=0)
+    ipi: Optional[float] = Field(None, ge=0)
+    pis: Optional[float] = Field(None, ge=0)
+    cofins: Optional[float] = Field(None, ge=0)
+    iss: Optional[float] = Field(None, ge=0)
+    iof: Optional[float] = Field(None, ge=0)
+    cide: Optional[float] = Field(None, ge=0)
+    csll: Optional[float] = Field(None, ge=0)
+    irrf: Optional[float] = Field(None, ge=0)
+    inss: Optional[float] = Field(None, ge=0)
+    fgts: Optional[float] = Field(None, ge=0)
+    outros_impostos: Optional[float] = Field(None, ge=0)
+    
     # Campos específicos para Marketplaces
     # Shopee
     shopee_category_id: Optional[str] = Field(None, max_length=50)
@@ -148,6 +178,36 @@ class ProductUpdate(BaseModel):
     height: Optional[float] = Field(None, ge=0)
     is_active: Optional[bool] = None
     is_service: Optional[bool] = None
+    
+    # SKU principal
+    sku: Optional[str] = Field(None, max_length=50)
+    is_main_sku: Optional[bool] = None
+    
+    # Campos de Estoque
+    cost_price: Optional[float] = Field(None, ge=0)
+    sale_price: Optional[float] = Field(None, ge=0)
+    current_stock: Optional[int] = Field(None, ge=0)
+    location: Optional[str] = Field(None, max_length=100)
+    min_stock: Optional[int] = Field(None, ge=0)
+    max_stock: Optional[int] = Field(None, ge=0)
+    reserved_stock: Optional[int] = Field(None, ge=0)
+    
+    # Campos Fiscais
+    cest: Optional[str] = Field(None, max_length=20)
+    cfop: Optional[str] = Field(None, max_length=10)
+    icms_st: Optional[float] = Field(None, ge=0)
+    icms: Optional[float] = Field(None, ge=0)
+    ipi: Optional[float] = Field(None, ge=0)
+    pis: Optional[float] = Field(None, ge=0)
+    cofins: Optional[float] = Field(None, ge=0)
+    iss: Optional[float] = Field(None, ge=0)
+    iof: Optional[float] = Field(None, ge=0)
+    cide: Optional[float] = Field(None, ge=0)
+    csll: Optional[float] = Field(None, ge=0)
+    irrf: Optional[float] = Field(None, ge=0)
+    inss: Optional[float] = Field(None, ge=0)
+    fgts: Optional[float] = Field(None, ge=0)
+    outros_impostos: Optional[float] = Field(None, ge=0)
     
     # Campos específicos para Marketplaces
     # Shopee
@@ -259,7 +319,7 @@ class ProductSKUResponse(ProductSKUBase):
 
 class ProductResponse(ProductBase):
     id: int
-    company_id: int
+    company_id: UUID
     skus: List[ProductSKUResponse] = []
     composite_components: List[ProductComponentResponse] = []
     created_at: datetime
@@ -272,12 +332,12 @@ class StockMovementResponse(StockMovementBase):
     id: int
     product_id: int
     sku_id: int
-    company_id: int
+    company_id: UUID
     previous_stock: int
     current_stock: int
     total_cost: float
     movement_description: str
-    user_id: Optional[int] = None
+    user_id: Optional[UUID] = None
     created_at: datetime
     
     class Config:

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Plus, Search, Filter, Download, Edit, Eye, Package, Trash2, Save, X, AlertCircle, CheckCircle, MinusCircle, Folder } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,6 +14,20 @@ import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { api } from "@/services/api";
 
+// Interface para produtos da listagem (API retorna ProductList)
+interface ProductListItem {
+  id: number;
+  name: string;
+  description?: string;
+  category?: string;
+  ncm?: string;
+  is_active: boolean;
+  sku_count: number;
+  total_stock: number;
+  created_at: string;
+}
+
+// Interface completa para produtos (usada no modal de edição)
 interface Product {
   id: string;
   name: string;
@@ -123,7 +137,7 @@ interface Category {
 }
 
 export default function Produtos() {
-  const [products, setProducts] = useState<Product[]>([]);
+  const [products, setProducts] = useState<ProductListItem[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
@@ -212,11 +226,12 @@ export default function Produtos() {
   });
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [categoryToDelete, setCategoryToDelete] = useState<Category | null>(null);
+  const [isViewMode, setIsViewMode] = useState(false);
   const [skuSearchTerm, setSkuSearchTerm] = useState("");
-  const [filteredSkuProducts, setFilteredSkuProducts] = useState<Product[]>([]);
-  const [skuAssociations, setSkuAssociations] = useState<Product[]>([]);
+  const [filteredSkuProducts, setFilteredSkuProducts] = useState<ProductListItem[]>([]);
+  const [skuAssociations, setSkuAssociations] = useState<ProductListItem[]>([]);
   const [skuAssociationSearchTerm, setSkuAssociationSearchTerm] = useState("");
-  const [filteredSkuAssociations, setFilteredSkuAssociations] = useState<Product[]>([]);
+  const [filteredSkuAssociations, setFilteredSkuAssociations] = useState<ProductListItem[]>([]);
   const [newSku, setNewSku] = useState({
     sku_code: "",
     barcode: "",
@@ -237,6 +252,7 @@ export default function Produtos() {
   });
 
   useEffect(() => {
+    console.log("🚀 useEffect executado - carregando dados...");
     loadProducts();
     loadSuppliers();
     loadCategories();
@@ -244,11 +260,15 @@ export default function Produtos() {
 
   const loadProducts = async () => {
     try {
+      console.log("🔄 Iniciando carregamento de produtos...");
       setIsLoading(true);
       const response = await api.get("/api/v1/products/");
-      setProducts(response.data.items || []);
+      console.log("✅ Resposta da API de produtos:", response.data);
+      console.log("📊 Número de produtos recebidos:", response.data?.length || 0);
+      setProducts(response.data || []);
+      console.log("💾 Produtos salvos no estado");
     } catch (error) {
-      console.error("Erro ao carregar produtos:", error);
+      console.error("❌ Erro ao carregar produtos:", error);
       toast({
         title: "Erro",
         description: "Não foi possível carregar os produtos",
@@ -256,13 +276,14 @@ export default function Produtos() {
       });
     } finally {
       setIsLoading(false);
+      console.log("🏁 Carregamento finalizado");
     }
   };
 
   const loadSuppliers = async () => {
     try {
       const response = await api.get("/api/v1/suppliers/");
-      setSuppliers(response.data.items || []);
+      setSuppliers(response.data || []);
     } catch (error) {
       console.error("Erro ao carregar fornecedores:", error);
     }
@@ -362,6 +383,7 @@ export default function Produtos() {
 
     const handleCreateProduct = () => {
     setEditingProduct(null);
+    setIsViewMode(false);
     setFormData({
       name: "",
       description: "",
@@ -421,52 +443,206 @@ export default function Produtos() {
     setIsModalOpen(true);
   };
 
-  const handleEditProduct = (product: Product) => {
-    setEditingProduct(product);
-    setFormData({
-      name: product.name,
-      description: product.description,
-      category: product.category,
-      category_id: product.category_id,
-      brand: product.brand,
-      sku: product.sku || "",
-      is_main_sku: product.is_main_sku || false,
-      product_type: product.product_type,
-      ncm: product.ncm,
-      ean: product.ean,
-      gtin: product.gtin,
-      weight: product.weight,
-      height: product.height,
-      width: product.width,
-      length: product.length,
-      is_active: product.is_active,
-      // Campos Shopee
-      shopee_category_id: product.shopee_category_id || "",
-      shopee_category_name: product.shopee_category_name || "",
-      shopee_attributes: product.shopee_attributes || {},
-      shopee_warranty: product.shopee_warranty || "",
-      shopee_brand_id: product.shopee_brand_id || "",
-      shopee_model_id: product.shopee_model_id || "",
-      shopee_is_pre_order: product.shopee_is_pre_order || false,
-      shopee_logistics: product.shopee_logistics || {},
-      // Campos Mercado Livre
-      mercadolivre_category_id: product.mercadolivre_category_id || "",
-      mercadolivre_category_name: product.mercadolivre_category_name || "",
-      mercadolivre_attributes: product.mercadolivre_attributes || {},
-      mercadolivre_warranty: product.mercadolivre_warranty || "",
-      mercadolivre_brand_id: product.mercadolivre_brand_id || "",
-      mercadolivre_model_id: product.mercadolivre_model_id || "",
-      mercadolivre_condition: product.mercadolivre_condition || "",
-      mercadolivre_listing_type: product.mercadolivre_listing_type || "",
-      mercadolivre_shipping: product.mercadolivre_shipping || {}
-    });
-    setSkus(product.skus || []);
-    setIsModalOpen(true);
+  const handleViewProduct = async (product: ProductListItem) => {
+    try {
+      setIsLoading(true);
+      
+      // Buscar dados completos do produto
+      const response = await api.get(`/api/v1/products/${product.id}`);
+      const fullProduct = response.data;
+      
+      // Preencher o formulário com os dados do produto (somente leitura)
+      setFormData({
+        name: fullProduct.name || "",
+        description: fullProduct.description || "",
+        category: fullProduct.category || "",
+        category_id: fullProduct.category_id,
+        brand: fullProduct.brand || "",
+        sku: fullProduct.sku || "",
+        is_main_sku: fullProduct.is_main_sku || false,
+        product_type: fullProduct.product_type || "simple",
+        ean: fullProduct.ean || "",
+        gtin: fullProduct.gtin || "",
+        weight: fullProduct.weight || 0,
+        height: fullProduct.height || 0,
+        width: fullProduct.width || 0,
+        length: fullProduct.length || 0,
+        is_active: fullProduct.is_active ?? true,
+        // Campos de Estoque
+        cost_price: fullProduct.cost_price || 0,
+        sale_price: fullProduct.sale_price || 0,
+        current_stock: fullProduct.current_stock || 0,
+        location: fullProduct.location || "",
+        min_stock: fullProduct.min_stock || 0,
+        max_stock: fullProduct.max_stock || 0,
+        reserved_stock: fullProduct.reserved_stock || 0,
+        // Campos Fiscais
+        ncm: fullProduct.ncm || "",
+        cest: fullProduct.cest || "",
+        cfop: fullProduct.cfop || "",
+        icms_st: fullProduct.icms_st || 0,
+        icms: fullProduct.icms || 0,
+        ipi: fullProduct.ipi || 0,
+        pis: fullProduct.pis || 0,
+        cofins: fullProduct.cofins || 0,
+        iss: fullProduct.iss || 0,
+        iof: fullProduct.iof || 0,
+        cide: fullProduct.cide || 0,
+        csll: fullProduct.csll || 0,
+        irrf: fullProduct.irrf || 0,
+        inss: fullProduct.inss || 0,
+        fgts: fullProduct.fgts || 0,
+        outros_impostos: fullProduct.outros_impostos || 0,
+        // Campos Shopee
+        shopee_category_id: fullProduct.shopee_category_id || "",
+        shopee_category_name: fullProduct.shopee_category_name || "",
+        shopee_attributes: fullProduct.shopee_attributes || {},
+        shopee_warranty: fullProduct.shopee_warranty || "",
+        shopee_brand_id: fullProduct.shopee_brand_id || "",
+        shopee_model_id: fullProduct.shopee_model_id || "",
+        shopee_is_pre_order: fullProduct.shopee_is_pre_order || false,
+        shopee_logistics: fullProduct.shopee_logistics || {},
+        // Campos Mercado Livre
+        mercadolivre_category_id: fullProduct.mercadolivre_category_id || "",
+        mercadolivre_category_name: fullProduct.mercadolivre_category_name || "",
+        mercadolivre_attributes: fullProduct.mercadolivre_attributes || {},
+        mercadolivre_warranty: fullProduct.mercadolivre_warranty || "",
+        mercadolivre_brand_id: fullProduct.mercadolivre_brand_id || "",
+        mercadolivre_model_id: fullProduct.mercadolivre_model_id || "",
+        mercadolivre_condition: fullProduct.mercadolivre_condition || "",
+        mercadolivre_listing_type: fullProduct.mercadolivre_listing_type || "",
+        mercadolivre_shipping: fullProduct.mercadolivre_shipping || {}
+      });
+      
+      // Carregar SKUs do produto
+      setSkus(fullProduct.skus || []);
+      
+      // Definir como produto em visualização (não edição)
+      setEditingProduct(null);
+      setIsViewMode(true);
+      setActiveTab("basic");
+      setIsModalOpen(true);
+      
+    } catch (error) {
+      console.error("Erro ao carregar produto para visualização:", error);
+      toast({
+        title: "Erro",
+        description: "Não foi possível carregar os dados do produto",
+        variant: "destructive"
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleEditProduct = async (product: ProductListItem) => {
+    try {
+      setIsLoading(true);
+      
+      // Buscar dados completos do produto
+      const response = await api.get(`/api/v1/products/${product.id}`);
+      const fullProduct = response.data;
+      
+      // Preencher o formulário com os dados do produto
+      setFormData({
+        name: fullProduct.name || "",
+        description: fullProduct.description || "",
+        category: fullProduct.category || "",
+        category_id: fullProduct.category_id,
+        brand: fullProduct.brand || "",
+        sku: fullProduct.sku || "",
+        is_main_sku: fullProduct.is_main_sku || false,
+        product_type: fullProduct.product_type || "simple",
+        ean: fullProduct.ean || "",
+        gtin: fullProduct.gtin || "",
+        weight: fullProduct.weight || 0,
+        height: fullProduct.height || 0,
+        width: fullProduct.width || 0,
+        length: fullProduct.length || 0,
+        is_active: fullProduct.is_active ?? true,
+        // Campos de Estoque
+        cost_price: fullProduct.cost_price || 0,
+        sale_price: fullProduct.sale_price || 0,
+        current_stock: fullProduct.current_stock || 0,
+        location: fullProduct.location || "",
+        min_stock: fullProduct.min_stock || 0,
+        max_stock: fullProduct.max_stock || 0,
+        reserved_stock: fullProduct.reserved_stock || 0,
+        // Campos Fiscais
+        ncm: fullProduct.ncm || "",
+        cest: fullProduct.cest || "",
+        cfop: fullProduct.cfop || "",
+        icms_st: fullProduct.icms_st || 0,
+        icms: fullProduct.icms || 0,
+        ipi: fullProduct.ipi || 0,
+        pis: fullProduct.pis || 0,
+        cofins: fullProduct.cofins || 0,
+        iss: fullProduct.iss || 0,
+        iof: fullProduct.iof || 0,
+        cide: fullProduct.cide || 0,
+        csll: fullProduct.csll || 0,
+        irrf: fullProduct.irrf || 0,
+        inss: fullProduct.inss || 0,
+        fgts: fullProduct.fgts || 0,
+        outros_impostos: fullProduct.outros_impostos || 0,
+        // Campos Shopee
+        shopee_category_id: fullProduct.shopee_category_id || "",
+        shopee_category_name: fullProduct.shopee_category_name || "",
+        shopee_attributes: fullProduct.shopee_attributes || {},
+        shopee_warranty: fullProduct.shopee_warranty || "",
+        shopee_brand_id: fullProduct.shopee_brand_id || "",
+        shopee_model_id: fullProduct.shopee_model_id || "",
+        shopee_is_pre_order: fullProduct.shopee_is_pre_order || false,
+        shopee_logistics: fullProduct.shopee_logistics || {},
+        // Campos Mercado Livre
+        mercadolivre_category_id: fullProduct.mercadolivre_category_id || "",
+        mercadolivre_category_name: fullProduct.mercadolivre_category_name || "",
+        mercadolivre_attributes: fullProduct.mercadolivre_attributes || {},
+        mercadolivre_warranty: fullProduct.mercadolivre_warranty || "",
+        mercadolivre_brand_id: fullProduct.mercadolivre_brand_id || "",
+        mercadolivre_model_id: fullProduct.mercadolivre_model_id || "",
+        mercadolivre_condition: fullProduct.mercadolivre_condition || "",
+        mercadolivre_listing_type: fullProduct.mercadolivre_listing_type || "",
+        mercadolivre_shipping: fullProduct.mercadolivre_shipping || {}
+      });
+      
+      // Carregar SKUs do produto
+      setSkus(fullProduct.skus || []);
+      
+      // Definir como produto em edição
+      setEditingProduct(fullProduct);
+      setIsViewMode(false);
+      setActiveTab("basic");
+      setIsModalOpen(true);
+      
+    } catch (error) {
+      console.error("Erro ao carregar produto para edição:", error);
+      toast({
+        title: "Erro",
+        description: "Não foi possível carregar os dados do produto",
+        variant: "destructive"
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleSaveProduct = async () => {
     try {
       setIsLoading(true);
+      
+      // Validação dos campos obrigatórios
+      if (!formData.name || formData.name.trim() === "") {
+        toast({
+          title: "Erro",
+          description: "Nome do produto é obrigatório",
+          variant: "destructive"
+        });
+        return;
+      }
+      
+      // Log dos dados sendo enviados
+      console.log("Dados sendo enviados:", formData);
       
       if (editingProduct) {
         // Update existing product
@@ -493,11 +669,12 @@ export default function Produtos() {
       
       setIsModalOpen(false);
       loadProducts();
-    } catch (error) {
+    } catch (error: any) {
       console.error("Erro ao salvar produto:", error);
+      console.error("Detalhes do erro:", error.response?.data);
       toast({
         title: "Erro",
-        description: "Não foi possível salvar o produto",
+        description: error.response?.data?.detail || "Não foi possível salvar o produto",
         variant: "destructive"
       });
     } finally {
@@ -631,9 +808,7 @@ export default function Produtos() {
   // Função para filtrar produtos com SKU principal
   const filterMainSkuProducts = (searchTerm: string) => {
     const filtered = products.filter(product => 
-      product.is_main_sku && 
-      (product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-       (product.sku && product.sku.toLowerCase().includes(searchTerm.toLowerCase())))
+      product.name.toLowerCase().includes(searchTerm.toLowerCase())
     );
     setFilteredSkuProducts(filtered);
   };
@@ -646,15 +821,13 @@ export default function Produtos() {
     }
     
     const filtered = products.filter(product => 
-      !product.is_main_sku && 
-      (product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-       (product.sku && product.sku.toLowerCase().includes(searchTerm.toLowerCase()))) &&
+      product.name.toLowerCase().includes(searchTerm.toLowerCase()) &&
       !skuAssociations.some(assoc => assoc.id === product.id)
     );
     setFilteredSkuAssociations(filtered);
   };
 
-  const addSkuAssociation = (product: Product) => {
+  const addSkuAssociation = (product: ProductListItem) => {
     if (!skuAssociations.some(assoc => assoc.id === product.id)) {
       setSkuAssociations([...skuAssociations, product]);
       setSkuAssociationSearchTerm("");
@@ -662,15 +835,43 @@ export default function Produtos() {
     }
   };
 
-  const removeSkuAssociation = (productId: string) => {
+  const removeSkuAssociation = (productId: number) => {
     setSkuAssociations(skuAssociations.filter(assoc => assoc.id !== productId));
   };
 
-  const filteredProducts = products.filter(product =>
-    product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    product.category.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    product.brand.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const handleDeleteProduct = async (product: ProductListItem) => {
+    if (product.sku_count > 0) {
+      toast({
+        title: "Não é possível remover",
+        description: "Este produto possui SKUs associados e não pode ser removido.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      await api.delete(`/api/v1/products/${product.id}`);
+      toast({
+        title: "Produto removido",
+        description: "O produto foi removido com sucesso.",
+      });
+      loadProducts(); // Recarrega a lista
+    } catch (error) {
+      console.error("Erro ao remover produto:", error);
+      toast({
+        title: "Erro ao remover",
+        description: "Não foi possível remover o produto. Tente novamente.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const filteredProducts = useMemo(() => {
+    return products.filter(product =>
+      product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (product.category && product.category.toLowerCase().includes(searchTerm.toLowerCase()))
+    );
+  }, [products, searchTerm]);
 
   return (
     <div className="flex-1 space-y-6 p-6">
@@ -694,16 +895,16 @@ export default function Produtos() {
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-2xl font-semibold">Produtos</h2>
-              <p className="text-muted-foreground">Gestão completa do catálogo de produtos</p>
-            </div>
+          <p className="text-muted-foreground">Gestão completa do catálogo de produtos</p>
+        </div>
             <Button onClick={handleCreateProduct} className="bg-gradient-primary text-primary-foreground">
-              <Plus className="mr-2 h-4 w-4" />
-              Novo Produto
-            </Button>
-          </div>
+          <Plus className="mr-2 h-4 w-4" />
+          Novo Produto
+        </Button>
+      </div>
 
-          {/* Cards de Resumo */}
-          <div className="grid gap-6 md:grid-cols-4">
+      {/* Cards de Resumo */}
+      <div className="grid gap-6 md:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total de Produtos</CardTitle>
@@ -733,7 +934,7 @@ export default function Produtos() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-primary">
-              {products.reduce((total, p) => total + (p.skus?.length || 0), 0)}
+              {products.reduce((total, p) => total + p.sku_count, 0)}
             </div>
             <p className="text-xs text-muted-foreground">Variações cadastradas</p>
           </CardContent>
@@ -745,12 +946,7 @@ export default function Produtos() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-warning">
-              {products.reduce((total, p) => {
-                const lowStockSkus = p.skus?.filter(sku => 
-                  (sku.current_stock - sku.reserved_stock) <= sku.min_stock
-                ).length || 0;
-                return total + lowStockSkus;
-              }, 0)}
+              {products.filter(p => p.total_stock <= 10).length}
             </div>
             <p className="text-xs text-muted-foreground">Requer atenção</p>
           </CardContent>
@@ -791,11 +987,9 @@ export default function Produtos() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Nome</TableHead>
-                  <TableHead>SKU</TableHead>
-                  <TableHead>Tipo</TableHead>
                   <TableHead>Categoria</TableHead>
-                  <TableHead>Marca</TableHead>
                   <TableHead>SKUs</TableHead>
+                  <TableHead>Estoque</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Ações</TableHead>
                 </TableRow>
@@ -804,34 +998,15 @@ export default function Produtos() {
                 {filteredProducts.map((product) => (
                   <TableRow key={product.id}>
                     <TableCell className="font-medium">{product.name}</TableCell>
-                    <TableCell>
-                      <div className="flex items-center space-x-1">
-                        <Badge variant="outline" className="font-mono text-xs">
-                          {product.sku || "-"}
-                        </Badge>
-                        {product.is_main_sku && (
-                          <Badge variant="default" className="text-xs">
-                            Principal
-                          </Badge>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={
-                        product.product_type === "simple" ? "default" :
-                        product.product_type === "variation" ? "secondary" :
-                        "outline"
-                      }>
-                        {product.product_type === "simple" ? "Simples" :
-                         product.product_type === "variation" ? "Variação" :
-                         "Composto"}
-                      </Badge>
-                    </TableCell>
-                  <TableCell>{product.category}</TableCell>
-                  <TableCell>{product.brand}</TableCell>
+                    <TableCell>{product.category || "-"}</TableCell>
                     <TableCell>
                       <Badge variant="outline">
-                        {product.skus?.length || 0} SKUs
+                        {product.sku_count} SKUs
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={product.total_stock > 0 ? "default" : "secondary"}>
+                        {product.total_stock} unidades
                       </Badge>
                     </TableCell>
                     <TableCell>
@@ -850,9 +1025,23 @@ export default function Produtos() {
                         >
                           <Edit className="h-4 w-4" />
                         </Button>
-                        <Button variant="outline" size="sm">
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={() => handleViewProduct(product)}
+                        >
                           <Eye className="h-4 w-4" />
                         </Button>
+                        {product.sku_count === 0 && (
+                          <Button 
+                            variant="outline" 
+                            size="sm"
+                            onClick={() => handleDeleteProduct(product)}
+                            className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        )}
                       </div>
                     </TableCell>
                   </TableRow>
@@ -999,17 +1188,17 @@ export default function Produtos() {
                                   onClick={() => handleDeleteCategory(category)}
                                 >
                                   Remover
-                                </Button>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
                 </div>
-              </div>
-            </CardContent>
-          </Card>
+          </div>
+        </CardContent>
+      </Card>
         </TabsContent>
       </Tabs>
 
@@ -1018,10 +1207,10 @@ export default function Produtos() {
           <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
-              {editingProduct ? "Editar Produto" : "Novo Produto"}
+              {isViewMode ? "Visualizar Produto" : editingProduct ? "Editar Produto" : "Novo Produto"}
             </DialogTitle>
             <DialogDescription>
-              {editingProduct ? "Edite as informações do produto" : "Cadastre um novo produto no sistema"}
+              {isViewMode ? "Visualize as informações do produto" : editingProduct ? "Edite as informações do produto" : "Cadastre um novo produto no sistema"}
             </DialogDescription>
           </DialogHeader>
 
@@ -1048,6 +1237,7 @@ export default function Produtos() {
                       value={formData.name}
                       onChange={(e) => setFormData({...formData, name: e.target.value})}
                       placeholder="Nome do produto"
+                      disabled={isViewMode}
                     />
                   </div>
                   <div className="space-y-2">
@@ -1057,6 +1247,7 @@ export default function Produtos() {
                       value={formData.brand}
                       onChange={(e) => setFormData({...formData, brand: e.target.value})}
                       placeholder="Marca do produto"
+                      disabled={isViewMode}
                     />
                   </div>
                 </div>
@@ -1068,6 +1259,7 @@ export default function Produtos() {
                       value={formData.sku}
                       onChange={(e) => setFormData({...formData, sku: e.target.value})}
                       placeholder="Código SKU do produto"
+                      disabled={isViewMode}
                     />
                     <Button 
                       type="button" 
@@ -1075,6 +1267,7 @@ export default function Produtos() {
                       size="sm"
                       onClick={generateSKU}
                       className="whitespace-nowrap"
+                      disabled={isViewMode}
                     >
                       Gerar SKU
                     </Button>
@@ -1088,6 +1281,7 @@ export default function Produtos() {
                     onChange={(e) => setFormData({...formData, description: e.target.value})}
                     placeholder="Descrição detalhada do produto"
                     rows={3}
+                    disabled={isViewMode}
                   />
                 </div>
               </div>
@@ -1357,11 +1551,11 @@ export default function Produtos() {
                                 <div>
                                   <div className="font-medium">{product.name}</div>
                                   <div className="text-sm text-muted-foreground">
-                                    SKU: {product.sku || 'N/A'} | Categoria: {product.category}
+                                    SKUs: {product.sku_count} | Categoria: {product.category || 'N/A'}
                                   </div>
                                 </div>
                                 <div className="text-sm">
-                                  <div>Marca: {product.brand || 'N/A'}</div>
+                                  <div>Estoque: {product.total_stock} unidades</div>
                                   <div>Status: {product.is_active ? 'Ativo' : 'Inativo'}</div>
                                 </div>
                               </div>
@@ -1394,11 +1588,11 @@ export default function Produtos() {
                                 <div>
                                   <div className="font-medium">{product.name}</div>
                                   <div className="text-sm text-muted-foreground">
-                                    SKU: {product.sku || 'N/A'} | Categoria: {product.category}
+                                    SKUs: {product.sku_count} | Categoria: {product.category || 'N/A'}
                                   </div>
                                 </div>
                                 <div className="text-sm">
-                                  <div>Marca: {product.brand || 'N/A'}</div>
+                                  <div>Estoque: {product.total_stock} unidades</div>
                                   <div>Status: {product.is_active ? 'Ativo' : 'Inativo'}</div>
                                 </div>
                                 <Badge variant="outline">Associado</Badge>
@@ -1652,19 +1846,10 @@ export default function Produtos() {
                           <SelectValue placeholder="Selecione o SKU de estoque" />
                         </SelectTrigger>
                         <SelectContent>
-                          {products.flatMap(product => 
-                            product.skus
-                              .filter(sku => sku.is_stock_sku)
-                              .map(sku => ({
-                                id: sku.id,
-                                name: `${product.name} - ${sku.sku_code} (${sku.current_stock} un)`,
-                                product_id: product.id,
-                                sku_id: sku.id,
-                                current_stock: sku.current_stock
-                              }))
-                          ).map((sku) => (
-                            <SelectItem key={sku.id} value={sku.id}>
-                              {sku.name}
+                          <SelectItem value="">Selecione um produto</SelectItem>
+                          {products.map((product) => (
+                            <SelectItem key={product.id} value={product.id.toString()}>
+                              {product.name} - {product.sku_count} SKUs ({product.total_stock} un)
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -2053,12 +2238,14 @@ export default function Produtos() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsModalOpen(false)}>
               <X className="mr-2 h-4 w-4" />
-              Cancelar
+              {isViewMode ? "Fechar" : "Cancelar"}
             </Button>
-            <Button onClick={handleSaveProduct} disabled={isLoading}>
-              <Save className="mr-2 h-4 w-4" />
-              {isLoading ? "Salvando..." : "Salvar Produto"}
-            </Button>
+            {!isViewMode && (
+              <Button onClick={handleSaveProduct} disabled={isLoading}>
+                <Save className="mr-2 h-4 w-4" />
+                {isLoading ? "Salvando..." : "Salvar Produto"}
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>

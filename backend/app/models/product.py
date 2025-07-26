@@ -45,6 +45,36 @@ class Product(Base):
     is_active = Column(Boolean, default=True)
     is_service = Column(Boolean, default=False)  # Se é serviço ou produto físico
     
+    # SKU principal
+    sku = Column(String(50), nullable=True, index=True)
+    is_main_sku = Column(Boolean, default=False)
+    
+    # Campos de Estoque
+    cost_price = Column(Float, default=0.0)
+    sale_price = Column(Float, default=0.0)
+    current_stock = Column(Integer, default=0)
+    location = Column(String(100))
+    min_stock = Column(Integer, default=0)
+    max_stock = Column(Integer, default=0)
+    reserved_stock = Column(Integer, default=0)
+    
+    # Campos Fiscais
+    cest = Column(String(20))
+    cfop = Column(String(10))
+    icms_st = Column(Float, default=0.0)
+    icms = Column(Float, default=0.0)
+    ipi = Column(Float, default=0.0)
+    pis = Column(Float, default=0.0)
+    cofins = Column(Float, default=0.0)
+    iss = Column(Float, default=0.0)
+    iof = Column(Float, default=0.0)
+    cide = Column(Float, default=0.0)
+    csll = Column(Float, default=0.0)
+    irrf = Column(Float, default=0.0)
+    inss = Column(Float, default=0.0)
+    fgts = Column(Float, default=0.0)
+    outros_impostos = Column(Float, default=0.0)
+    
     # Campos específicos para Marketplaces
     # Shopee
     shopee_category_id = Column(String(50))  # ID da categoria no Shopee
@@ -72,7 +102,7 @@ class Product(Base):
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     
     # Relacionamentos
-    company = relationship("Company", back_populates="products")
+    company = relationship("Company")
     category_obj = relationship("Category", foreign_keys=[category_id], back_populates="products")
     skus = relationship("ProductSKU", back_populates="product", cascade="all, delete-orphan")
     stock_movements = relationship("StockMovement", back_populates="product")

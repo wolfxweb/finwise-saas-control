@@ -28,30 +28,46 @@ def create_product(
     current_user: User = Depends(get_current_user)
 ):
     """Criar um novo produto"""
-    # Verificar se já existe produto com mesmo nome na empresa
-    existing_product = db.query(Product).filter(
-        and_(
-            Product.company_id == current_user.company_id,
-            Product.name == product.name
+    try:
+        print(f"Tentando criar produto: {product.name}")
+        print(f"Usuário logado: {current_user.email}")
+        print(f"Company ID do usuário: {current_user.company_id}")
+        print(f"Dados recebidos: {product.dict()}")
+        
+        # Verificar se já existe produto com mesmo nome na empresa
+        existing_product = db.query(Product).filter(
+            and_(
+                Product.company_id == current_user.company_id,
+                Product.name == product.name
+            )
+        ).first()
+        
+        if existing_product:
+            print(f"Produto já existe: {product.name}")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Já existe um produto com este nome"
+            )
+        
+        db_product = Product(
+            **product.dict(),
+            company_id=current_user.company_id
         )
-    ).first()
-    
-    if existing_product:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Já existe um produto com este nome"
-        )
-    
-    db_product = Product(
-        **product.dict(),
-        company_id=current_user.company_id
-    )
-    
-    db.add(db_product)
-    db.commit()
-    db.refresh(db_product)
-    
-    return db_product
+        
+        print(f"Criando produto no banco: {db_product.name} com company_id: {db_product.company_id}")
+        db.add(db_product)
+        db.commit()
+        db.refresh(db_product)
+        
+        print(f"Produto criado com sucesso: {db_product.id}")
+        return db_product
+        
+    except Exception as e:
+        print(f"Erro ao criar produto: {str(e)}")
+        print(f"Tipo do erro: {type(e)}")
+        import traceback
+        print(f"Traceback: {traceback.format_exc()}")
+        raise
 
 @router.get("/", response_model=List[ProductList])
 def get_products(
@@ -67,7 +83,14 @@ def get_products(
     current_user: User = Depends(get_current_user)
 ):
     """Listar produtos com filtros"""
+    print(f"Listando produtos para usuário: {current_user.email}")
+    print(f"Company ID do usuário: {current_user.company_id}")
+    
     query = db.query(Product).filter(Product.company_id == current_user.company_id)
+    
+    # Por padrão, mostrar apenas produtos ativos
+    if is_active is None:
+        query = query.filter(Product.is_active == True)
     
     # Aplicar filtros
     if search:
@@ -194,7 +217,9 @@ def delete_product(
     current_user: User = Depends(get_current_user)
 ):
     """Deletar produto (soft delete)"""
-    db_product = db.query(Product).filter(
+    db_product = db.query(Product).options(
+        joinedload(Product.skus)
+    ).filter(
         and_(
             Product.id == product_id,
             Product.company_id == current_user.company_id
@@ -205,6 +230,13 @@ def delete_product(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Produto não encontrado"
+        )
+    
+    # Verificar se o produto tem SKUs associados
+    if db_product.skus:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Não é possível remover um produto que possui SKUs associados"
         )
     
     # Soft delete - apenas desativar
