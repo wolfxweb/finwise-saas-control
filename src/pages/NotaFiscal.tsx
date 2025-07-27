@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { Plus, Search, Filter, Download, Edit, Eye, Receipt, FileText, CheckCircle, Clock, Upload, FileArchive, Trash2, FileDown, ChevronUp, ChevronDown, BarChart3, DollarSign, TrendingUp, MapPin, X } from "lucide-react";
+import { Plus, Search, Filter, Download, Edit, Eye, Receipt, FileText, CheckCircle, Clock, Upload, FileArchive, Trash2, FileDown, ChevronUp, ChevronDown, BarChart3, DollarSign, TrendingUp, MapPin, X, CheckSquare, Square } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -88,6 +88,10 @@ export default function NotaFiscal() {
   const [dadosTemporal, setDadosTemporal] = useState<any[]>([]);
 
   const [dadosValor, setDadosValor] = useState<any[]>([]);
+
+  // Estados para seleção múltipla
+  const [selectedItems, setSelectedItems] = useState<number[]>([]);
+  const [selectAll, setSelectAll] = useState(false);
 
   // Estados para filtros de rentabilidade
   const [filtroRentabilidade, setFiltroRentabilidade] = useState({
@@ -1405,6 +1409,56 @@ export default function NotaFiscal() {
       : <ChevronDown className="h-4 w-4 text-blue-600" />;
   };
 
+  // Funções para seleção múltipla
+  const handleSelectAll = () => {
+    if (selectAll) {
+      setSelectedItems([]);
+      setSelectAll(false);
+    } else {
+      const allIds = getPaginatedData().map(item => item.id);
+      setSelectedItems(allIds);
+      setSelectAll(true);
+    }
+  };
+
+  const handleSelectItem = (id: number) => {
+    setSelectedItems(prev => {
+      if (prev.includes(id)) {
+        const newSelected = prev.filter(itemId => itemId !== id);
+        setSelectAll(false);
+        return newSelected;
+      } else {
+        const newSelected = [...prev, id];
+        const allIds = getPaginatedData().map(item => item.id);
+        setSelectAll(newSelected.length === allIds.length);
+        return newSelected;
+      }
+    });
+  };
+
+  const handleDeleteSelected = async () => {
+    if (selectedItems.length === 0) {
+      toast.error("Selecione pelo menos uma nota fiscal para remover");
+      return;
+    }
+
+    if (confirm(`Tem certeza que deseja remover ${selectedItems.length} nota(s) fiscal(is)?`)) {
+      try {
+        for (const id of selectedItems) {
+          await handleDeleteNotaFiscal(id);
+        }
+        
+        toast.success(`${selectedItems.length} nota(s) fiscal(is) removida(s) com sucesso`);
+        setSelectedItems([]);
+        setSelectAll(false);
+        loadNotasFiscais();
+      } catch (error) {
+        console.error("Erro ao remover notas fiscais:", error);
+        toast.error("Erro ao remover notas fiscais selecionadas");
+      }
+    }
+  };
+
   return (
     <div className="flex-1 space-y-6 p-6">
       {/* Header */}
@@ -1595,6 +1649,15 @@ export default function NotaFiscal() {
               <Filter className="mr-2 h-4 w-4" />
               Filtros {hasActiveFilters() && <Badge variant="secondary" className="ml-2">Ativo</Badge>}
             </Button>
+            {selectedItems.length > 0 && (
+              <Button 
+                variant="destructive"
+                onClick={handleDeleteSelected}
+              >
+                <Trash2 className="mr-2 h-4 w-4" />
+                Remover ({selectedItems.length})
+              </Button>
+            )}
             <Button variant="outline">
               <Download className="mr-2 h-4 w-4" />
               Relatório
@@ -1605,6 +1668,20 @@ export default function NotaFiscal() {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-12">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={handleSelectAll}
+                      className="h-4 w-4 p-0"
+                    >
+                      {selectAll ? (
+                        <CheckSquare className="h-4 w-4" />
+                      ) : (
+                        <Square className="h-4 w-4" />
+                      )}
+                    </Button>
+                  </TableHead>
                   <TableHead 
                     className="cursor-pointer hover:bg-gray-50"
                     onClick={() => handleSort('numero')}
@@ -1650,19 +1727,33 @@ export default function NotaFiscal() {
               <TableBody>
                 {loading ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="text-center py-8">
+                    <TableCell colSpan={9} className="text-center py-8">
                       Carregando notas fiscais...
                     </TableCell>
                   </TableRow>
                 ) : notasFiscais.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                    <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
                       Nenhuma nota fiscal encontrada
                     </TableCell>
                   </TableRow>
                 ) : (
                   getPaginatedData().map((item) => (
                     <TableRow key={item.id}>
+                      <TableCell>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleSelectItem(item.id)}
+                          className="h-4 w-4 p-0"
+                        >
+                          {selectedItems.includes(item.id) ? (
+                            <CheckSquare className="h-4 w-4" />
+                          ) : (
+                            <Square className="h-4 w-4" />
+                          )}
+                        </Button>
+                      </TableCell>
                       <TableCell className="font-medium">{item.numero}</TableCell>
                       <TableCell>{item.destinatario_nome}</TableCell>
                       <TableCell>{new Date(item.data_emissao).toLocaleDateString('pt-BR')}</TableCell>
