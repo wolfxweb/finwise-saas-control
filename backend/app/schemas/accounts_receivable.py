@@ -30,6 +30,10 @@ class AccountsReceivableCreate(AccountsReceivableBase):
     total_installments: int = Field(1, ge=1, le=60)
     installment_amount: Optional[float] = None  # Se fornecido, é o valor da parcela
     installment_interval_days: int = Field(30, ge=1, le=365)  # Intervalo entre parcelas
+    # Status e valores de pagamento
+    status: Optional[ReceivableStatus] = ReceivableStatus.PENDING
+    paid_amount: Optional[float] = 0
+    payment_date: Optional[date] = None
 
 class AccountsReceivableUpdate(BaseModel):
     description: Optional[str] = None

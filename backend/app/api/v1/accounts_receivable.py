@@ -83,7 +83,10 @@ def create_accounts_receivable(
             installment_number=1,
             total_installments=receivable.total_installments,
             notes=receivable.notes,
-            reference=receivable.reference
+            reference=receivable.reference,
+            status=receivable.status,
+            paid_amount=receivable.paid_amount or 0,
+            payment_date=receivable.payment_date
         )
         
         db.add(db_receivable)
