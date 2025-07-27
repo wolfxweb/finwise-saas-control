@@ -55,6 +55,7 @@ export default function NotaFiscal() {
   const [importCategoryId, setImportCategoryId] = useState<number | null>(null);
   const [importCustomerId, setImportCustomerId] = useState<number | null>(null);
   const [importStatus, setImportStatus] = useState<string>('pending');
+  const [createFinancialEntry, setCreateFinancialEntry] = useState<boolean>(true);
   const [categories, setCategories] = useState<any[]>([]);
   const [customers, setCustomers] = useState<any[]>([]);
   const [selectedFiles, setSelectedFiles] = useState<FileList | null>(null);
