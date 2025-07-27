@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Plus, Search, Filter, Download, Edit, Eye, Trash2, Save, X, Calendar, DollarSign, Users, BarChart3, Tag } from "lucide-react";
+import { Plus, Search, Filter, Download, Edit, Eye, Trash2, Save, X, Calendar, DollarSign, Users, BarChart3, Tag, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -97,6 +97,9 @@ export default function ContasReceber() {
   // Estados da modal de confirmação de exclusão
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [receivableToDelete, setReceivableToDelete] = useState<AccountsReceivable | null>(null);
+  
+  // Estados para remover todos
+  const [isDeleteAllModalOpen, setIsDeleteAllModalOpen] = useState(false);
   
   // Estados para abas
   const [activeMainTab, setActiveMainTab] = useState("receivables");
@@ -391,6 +394,30 @@ export default function ContasReceber() {
     }
   };
 
+  // Função para remover todos os lançamentos
+  const handleDeleteAllReceivables = () => {
+    setIsDeleteAllModalOpen(true);
+  };
+
+  const confirmDeleteAllReceivables = async () => {
+    try {
+      await api.delete("/api/v1/accounts-receivable/");
+      toast({
+        title: "Sucesso",
+        description: "Todas as contas a receber foram excluídas com sucesso"
+      });
+      setIsDeleteAllModalOpen(false);
+      loadData();
+    } catch (error: any) {
+      console.error("Erro ao excluir todas as contas a receber:", error);
+      toast({
+        title: "Erro",
+        description: error.response?.data?.detail || "Erro ao excluir todas as contas a receber",
+        variant: "destructive"
+      });
+    }
+  };
+
   const handleQuickStatusChange = async (receivable: AccountsReceivable, newStatus: "pending" | "paid" | "overdue" | "cancelled") => {
     try {
       const updateData: any = { status: newStatus };
@@ -558,10 +585,16 @@ export default function ContasReceber() {
           <h1 className="text-3xl font-bold">Contas a Receber</h1>
           <p className="text-muted-foreground">Controle de receitas e recebimentos</p>
         </div>
-        <Button onClick={handleCreateReceivable}>
-          <Plus className="h-4 w-4 mr-2" />
-          Nova Conta
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="destructive" onClick={handleDeleteAllReceivables}>
+            <Trash2 className="h-4 w-4 mr-2" />
+            Remover Todas
+          </Button>
+          <Button onClick={handleCreateReceivable}>
+            <Plus className="h-4 w-4 mr-2" />
+            Nova Conta
+          </Button>
+        </div>
       </div>
 
             {/* Abas Principais */}
@@ -1493,6 +1526,38 @@ export default function ContasReceber() {
             >
               <Trash2 className="h-4 w-4 mr-2" />
               Deletar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de Confirmação de Exclusão em Massa */}
+      <Dialog open={isDeleteAllModalOpen} onOpenChange={setIsDeleteAllModalOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Confirmar Remoção em Massa</DialogTitle>
+            <DialogDescription>
+              <div className="flex items-center space-x-2 text-red-600 mb-2">
+                <AlertCircle className="h-5 w-5" />
+                <span className="font-semibold">Atenção!</span>
+              </div>
+              Tem certeza que deseja remover <span className="font-semibold text-foreground">TODAS</span> as contas a receber?
+              <br />
+              <span className="text-sm text-muted-foreground">
+                Esta ação não pode ser desfeita e removerá {receivables.length} lançamento(s).
+              </span>
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsDeleteAllModalOpen(false)}>
+              Cancelar
+            </Button>
+            <Button 
+              variant="destructive" 
+              onClick={confirmDeleteAllReceivables}
+            >
+              <Trash2 className="h-4 w-4 mr-2" />
+              Remover Todas
             </Button>
           </DialogFooter>
         </DialogContent>

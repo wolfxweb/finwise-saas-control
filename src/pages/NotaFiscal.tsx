@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { Plus, Search, Filter, Download, Edit, Eye, Receipt, FileText, CheckCircle, Clock, Upload, FileArchive, Trash2, FileDown, ChevronUp, ChevronDown, BarChart3, DollarSign, TrendingUp, MapPin, X, CheckSquare, Square } from "lucide-react";
+import { Plus, Search, Filter, Download, Edit, Eye, Receipt, FileText, CheckCircle, Clock, Upload, FileArchive, Trash2, FileDown, ChevronUp, ChevronDown, BarChart3, DollarSign, TrendingUp, MapPin, X, CheckSquare, Square, AlertCircle } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { notaFiscalAPI } from "@/services/api";
+import { notaFiscalAPI, api } from "@/services/api";
 import { toast } from "sonner";
 import {
   BarChart,
@@ -51,6 +51,12 @@ export default function NotaFiscal() {
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
   const [importType, setImportType] = useState<string>('saida');
   const [importOrigin, setImportOrigin] = useState<string>('manual');
+  const [importFinancialType, setImportFinancialType] = useState<string>('receita');
+  const [importCategoryId, setImportCategoryId] = useState<number | null>(null);
+  const [importCustomerId, setImportCustomerId] = useState<number | null>(null);
+  const [importStatus, setImportStatus] = useState<string>('pending');
+  const [categories, setCategories] = useState<any[]>([]);
+  const [customers, setCustomers] = useState<any[]>([]);
   const [selectedFiles, setSelectedFiles] = useState<FileList | null>(null);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -59,6 +65,7 @@ export default function NotaFiscal() {
   const [selectedNotaFiscal, setSelectedNotaFiscal] = useState<any>(null);
   const [isViewDialogOpen, setIsViewDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [isDeleteAllDialogOpen, setIsDeleteAllDialogOpen] = useState(false);
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [validationErrors, setValidationErrors] = useState<{[key: string]: string}>({});
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
@@ -146,6 +153,8 @@ export default function NotaFiscal() {
   // Carregar notas fiscais
   useEffect(() => {
     loadNotasFiscais();
+    loadCategories();
+    loadCustomers();
   }, []);
 
   // Processar dados dos relatórios quando notas fiscais mudarem
@@ -177,6 +186,52 @@ export default function NotaFiscal() {
       toast.error("Erro ao carregar notas fiscais");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadCategories = async () => {
+    try {
+      const response = await api.get("/api/v1/categories/");
+      setCategories(response.data || []);
+    } catch (error) {
+      console.error("Erro ao carregar categorias:", error);
+    }
+  };
+
+  const loadCustomers = async () => {
+    try {
+      const response = await api.get("/api/v1/customers/");
+      setCustomers(response.data || []);
+    } catch (error) {
+      console.error("Erro ao carregar clientes:", error);
+    }
+  };
+
+  const getDefaultCustomer = async () => {
+    try {
+      // Tentar buscar clientes existentes
+      const response = await api.get("/api/v1/customers/");
+      const customers = response.data || [];
+      
+      if (customers.length > 0) {
+        // Usar o primeiro cliente disponível
+        return customers[0].id;
+      } else {
+        // Criar um cliente padrão se não existir nenhum
+        const defaultCustomer = {
+          name: "Cliente Padrão",
+          email: "cliente@padrao.com",
+          customer_type: "individual",
+          status: "active",
+          cpf: "000.000.000-00"
+        };
+        
+        const newCustomer = await api.post("/api/v1/customers/", defaultCustomer);
+        return newCustomer.data.id;
+      }
+    } catch (error) {
+      console.error("Erro ao obter cliente padrão:", error);
+      return 1; // Fallback
     }
   };
 
@@ -246,6 +301,27 @@ export default function NotaFiscal() {
       toast.error("Erro ao deletar nota fiscal");
     } finally {
       setDeletingId(null);
+    }
+  };
+
+  const handleDeleteAllNotasFiscais = async () => {
+    try {
+      setLoading(true);
+      const totalNotas = notasFiscais.length;
+      
+      // Deletar todas as notas fiscais uma por uma
+      for (const nota of notasFiscais) {
+        await notaFiscalAPI.deleteNotaFiscal(nota.id);
+      }
+      
+      toast.success(`${totalNotas} notas fiscais removidas com sucesso!`);
+      await loadNotasFiscais();
+      setIsDeleteAllDialogOpen(false);
+    } catch (error) {
+      console.error("Erro ao deletar todas as notas fiscais:", error);
+      toast.error("Erro ao deletar todas as notas fiscais");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -515,15 +591,43 @@ export default function NotaFiscal() {
             const xmlContent = await file.text();
             
             // Importar via API
-            await notaFiscalAPI.importNotaFiscal({
+            const response = await notaFiscalAPI.importNotaFiscal({
               xml_content: xmlContent,
               xml_filename: file.name,
               tipo: importType,
               origem: importOrigin
             });
             
+            console.log('📄 Resposta da API:', response);
+            
+            // Verificar se a resposta é válida
+            if (!response || !response.data) {
+              console.error('❌ Resposta da API inválida:', response);
+              const errorMessage = `Erro: Resposta inválida da API para ${file.name}`;
+              setImportErrors(prev => [...prev, errorMessage]);
+              toast.error(errorMessage);
+              continue;
+            }
+            
+            // Extrair dados da nota fiscal da resposta
+            const notaFiscal = response.data;
+            
+            console.log('📄 Nota fiscal extraída:', notaFiscal);
+            
+            // Verificar se os dados da nota fiscal são válidos
+            if (!notaFiscal || !notaFiscal.numero) {
+              console.error('❌ Dados da nota fiscal inválidos:', notaFiscal);
+              const errorMessage = `Erro: Dados inválidos da nota fiscal para ${file.name}`;
+              setImportErrors(prev => [...prev, errorMessage]);
+              toast.error(errorMessage);
+              continue;
+            }
+            
+            // Criar lançamento financeiro automaticamente
+            await createFinancialEntry(notaFiscal);
+            
             processedCount++;
-            toast.success(`Nota fiscal ${file.name} importada com sucesso!`);
+            toast.success(`Nota fiscal ${file.name} importada e lançamento criado com sucesso!`);
           } else if (file.name.endsWith('.zip')) {
             // Processar arquivo ZIP
             const zipResults = await processZipFile(file);
@@ -531,15 +635,43 @@ export default function NotaFiscal() {
             // Importar cada XML do ZIP
             for (const xmlData of zipResults) {
               try {
-                await notaFiscalAPI.importNotaFiscal({
+                const response = await notaFiscalAPI.importNotaFiscal({
                   xml_content: xmlData.xmlContent,
                   xml_filename: xmlData.numero + '.xml',
                   tipo: importType,
                   origem: importOrigin
                 });
                 
+                console.log('📄 Resposta da API (ZIP):', response);
+                
+                // Verificar se a resposta é válida
+                if (!response || !response.data) {
+                  console.error('❌ Resposta da API inválida (ZIP):', response);
+                  const errorMessage = `Erro: Resposta inválida da API para ${xmlData.numero}`;
+                  setImportErrors(prev => [...prev, errorMessage]);
+                  toast.error(errorMessage);
+                  continue;
+                }
+                
+                // Extrair dados da nota fiscal da resposta
+                const notaFiscal = response.data;
+                
+                console.log('📄 Nota fiscal extraída (ZIP):', notaFiscal);
+                
+                // Verificar se os dados da nota fiscal são válidos
+                if (!notaFiscal || !notaFiscal.numero) {
+                  console.error('❌ Dados da nota fiscal inválidos (ZIP):', notaFiscal);
+                  const errorMessage = `Erro: Dados inválidos da nota fiscal para ${xmlData.numero}`;
+                  setImportErrors(prev => [...prev, errorMessage]);
+                  toast.error(errorMessage);
+                  continue;
+                }
+                
+                // Criar lançamento financeiro automaticamente
+                await createFinancialEntry(notaFiscal);
+                
                 processedCount++;
-                toast.success(`Nota fiscal ${xmlData.numero} importada com sucesso!`);
+                toast.success(`Nota fiscal ${xmlData.numero} importada e lançamento criado com sucesso!`);
               } catch (error) {
                 const errorMessage = `Erro ao importar nota ${xmlData.numero}: ${error instanceof Error ? error.message : 'Erro desconhecido'}`;
                 setImportErrors(prev => [...prev, errorMessage]);
@@ -563,7 +695,7 @@ export default function NotaFiscal() {
       await loadNotasFiscais();
       
       if (processedCount > 0) {
-        toast.success(`${processedCount} nota(s) fiscal(is) importada(s) com sucesso!`);
+        toast.success(`${processedCount} nota(s) fiscal(is) importada(s) e lançamento(s) criado(s) com sucesso!`);
       }
     } catch (error) {
       console.error("Erro durante importação:", error);
@@ -573,12 +705,121 @@ export default function NotaFiscal() {
     }
   };
 
+  // Função para criar lançamento financeiro automaticamente
+  const createFinancialEntry = async (notaFiscal: any) => {
+    let receitaData: any = null;
+    
+    try {
+      // Verificar se notaFiscal existe
+      if (!notaFiscal) {
+        console.error('❌ Nota fiscal é null ou undefined');
+        return;
+      }
+      
+      console.log('🔍 Criando lançamento financeiro para NF:', notaFiscal);
+      console.log('📊 Dados da NF:', {
+        numero: notaFiscal.numero,
+        numero_nota: notaFiscal.numero_nota,
+        chave_acesso: notaFiscal.chave_acesso,
+        destinatario_nome: notaFiscal.destinatario_nome,
+        destinatario_id: notaFiscal.destinatario_id,
+        valor_total: notaFiscal.valor_total,
+        valor_produtos: notaFiscal.valor_produtos,
+        valor_icms: notaFiscal.valor_icms,
+        valor_ipi: notaFiscal.valor_ipi,
+        valor_pis: notaFiscal.valor_pis,
+        valor_cofins: notaFiscal.valor_cofins,
+        valor_frete: notaFiscal.valor_frete,
+        data_emissao: notaFiscal.data_emissao
+      });
+      console.log('⚙️ Configurações de importação:', {
+        importFinancialType,
+        importCategoryId,
+        importCustomerId,
+        importStatus
+      });
+
+      // Usar o tipo financeiro selecionado pelo usuário
+      if (importFinancialType === 'receita') {
+        // Usar cliente selecionado ou cliente padrão se não houver destinatário_id
+        const customerId = importCustomerId || notaFiscal.destinatario_id || await getDefaultCustomer();
+        
+        // Calcular valor total da nota fiscal
+        const valorTotal = parseFloat(notaFiscal.valor_total) || 
+                          parseFloat(notaFiscal.valor_produtos) || 
+                          (parseFloat(notaFiscal.valor_produtos || 0) + 
+                           parseFloat(notaFiscal.valor_icms || 0) + 
+                           parseFloat(notaFiscal.valor_ipi || 0) + 
+                           parseFloat(notaFiscal.valor_pis || 0) + 
+                           parseFloat(notaFiscal.valor_cofins || 0) + 
+                           parseFloat(notaFiscal.valor_frete || 0));
+
+        console.log('💰 Valor total calculado:', valorTotal);
+
+        // Converter data_emissao de datetime para date (remover hora)
+        const entryDate = notaFiscal.data_emissao ? 
+          new Date(notaFiscal.data_emissao).toISOString().split('T')[0] : 
+          new Date().toISOString().split('T')[0];
+
+        // Definir valores baseados no status
+        const paidAmount = importStatus === 'paid' ? valorTotal : 0;
+        const paymentDate = importStatus === 'paid' ? new Date().toISOString().split('T')[0] : null;
+
+        // Criar conta a receber
+        receitaData = {
+          description: `NF ${notaFiscal.numero || notaFiscal.numero_nota} - ${notaFiscal.destinatario_nome || 'Cliente'}`,
+          customer_id: customerId,
+          category_id: importCategoryId,
+          receivable_type: 'cash',
+          total_amount: valorTotal,
+          entry_date: entryDate, // Data de emissão da nota como data de entrada (apenas data, sem hora)
+          due_date: new Date().toISOString().split('T')[0], // Data de importação como data de vencimento
+          notes: `Importado automaticamente da NF ${notaFiscal.numero || notaFiscal.numero_nota}`,
+          reference: notaFiscal.numero || notaFiscal.numero_nota || notaFiscal.chave_acesso, // Número da nota fiscal como referência
+          status: importStatus, // Status selecionado na importação
+          paid_amount: paidAmount, // Valor pago se status for 'paid'
+          payment_date: paymentDate, // Data de pagamento se status for 'paid'
+          // Campos obrigatórios para parcelamento (valores padrão)
+          total_installments: 1,
+          installment_interval_days: 30
+        };
+
+        console.log('📝 Dados da receita a ser criada:', receitaData);
+
+        const response = await api.post("/api/v1/accounts-receivable/", receitaData);
+        console.log('✅ Conta a receber criada com sucesso:', response.data);
+      } else {
+        // Criar conta a pagar (quando implementado)
+        // Por enquanto, apenas log
+        console.log('Conta a pagar seria criada para NF:', notaFiscal.numero);
+      }
+    } catch (error) {
+      console.error("❌ Erro ao criar lançamento financeiro:", error);
+      console.error("📋 Detalhes do erro:", {
+        message: error instanceof Error ? error.message : 'Erro desconhecido',
+        response: error instanceof Error && 'response' in error ? error.response : null
+      });
+      
+      // Mostrar detalhes específicos do erro 422
+      if (error instanceof Error && 'response' in error && (error as any).response?.status === 422) {
+        console.error("🔍 Erro de validação (422):", (error as any).response.data);
+        console.error("📝 Dados que causaram erro:", receitaData);
+      }
+      
+      // Não interromper o processo de importação se falhar o lançamento
+    }
+  };
+
   // Função para cancelar importação
   const handleCancelImport = () => {
     setIsImportDialogOpen(false);
     setSelectedFiles(null);
     setImportType('saida');
     setImportOrigin('manual');
+    setImportFinancialType('receita');
+    setImportCategoryId(null);
+    setImportCustomerId(null);
+    setImportStatus('pending');
   };
 
   const mockData = [
@@ -1475,6 +1716,14 @@ export default function NotaFiscal() {
           <Button className="bg-gradient-primary text-primary-foreground" onClick={() => setIsCreateDialogOpen(true)}>
             <Plus className="mr-2 h-4 w-4" />
             Emitir NF
+          </Button>
+          <Button 
+            variant="destructive" 
+            onClick={() => setIsDeleteAllDialogOpen(true)}
+            disabled={notasFiscais.length === 0 || loading}
+          >
+            <Trash2 className="mr-2 h-4 w-4" />
+            Remover Todas
           </Button>
         </div>
       </div>
@@ -3117,6 +3366,71 @@ export default function NotaFiscal() {
               </Select>
             </div>
 
+            {/* Tipo de Lançamento Financeiro */}
+            <div className="space-y-2">
+              <Label htmlFor="import-financial-type">Tipo de Lançamento</Label>
+              <Select value={importFinancialType} onValueChange={setImportFinancialType}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione o tipo" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="receita">Receita</SelectItem>
+                  <SelectItem value="despesa">Despesa</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Cliente */}
+            <div className="space-y-2">
+              <Label htmlFor="import-customer">Cliente</Label>
+              <Select value={importCustomerId?.toString() || ''} onValueChange={(value) => setImportCustomerId(value ? parseInt(value) : null)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione um cliente (opcional)" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">Usar cliente da nota fiscal</SelectItem>
+                  {customers.map((customer) => (
+                    <SelectItem key={customer.id} value={customer.id.toString()}>
+                      {customer.name} {customer.cpf ? `(${customer.cpf})` : customer.cnpj ? `(${customer.cnpj})` : ''}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Categoria */}
+            <div className="space-y-2">
+              <Label htmlFor="import-category">Categoria</Label>
+              <Select value={importCategoryId?.toString() || ''} onValueChange={(value) => setImportCategoryId(value ? parseInt(value) : null)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione uma categoria (opcional)" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">Sem categoria</SelectItem>
+                  {categories.map((category) => (
+                    <SelectItem key={category.id} value={category.id.toString()}>
+                      {category.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Status do Lançamento */}
+            <div className="space-y-2">
+              <Label htmlFor="import-status">Status do Lançamento</Label>
+              <Select value={importStatus} onValueChange={setImportStatus}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione o status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="pending">Pendente</SelectItem>
+                  <SelectItem value="paid">Pago</SelectItem>
+                  <SelectItem value="overdue">Vencido</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
             {/* Botões de Ação */}
             <div className="flex justify-end space-x-2 pt-4">
               <Button variant="outline" onClick={handleCancelImport}>
@@ -3787,6 +4101,44 @@ export default function NotaFiscal() {
               disabled={deletingId === null}
             >
               {deletingId ? "Removendo..." : "Remover"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de Confirmação de Remoção de Todas as Notas Fiscais */}
+      <Dialog open={isDeleteAllDialogOpen} onOpenChange={setIsDeleteAllDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Confirmar Remoção em Massa</DialogTitle>
+            <DialogDescription>
+              Tem certeza que deseja remover <strong>TODAS as {notasFiscais.length} notas fiscais</strong>? 
+              Esta ação não pode ser desfeita e removerá permanentemente todos os documentos fiscais.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
+            <div className="flex items-center">
+              <AlertCircle className="h-5 w-5 text-red-500 mr-2" />
+              <span className="text-sm text-red-700 font-medium">
+                Atenção: Esta é uma ação irreversível!
+              </span>
+            </div>
+            <p className="text-xs text-red-600 mt-1">
+              Todos os dados das notas fiscais serão perdidos permanentemente.
+            </p>
+          </div>
+          
+          <div className="flex justify-end space-x-2 pt-4">
+            <Button variant="outline" onClick={() => setIsDeleteAllDialogOpen(false)}>
+              Cancelar
+            </Button>
+            <Button 
+              variant="destructive" 
+              onClick={handleDeleteAllNotasFiscais}
+              disabled={loading}
+            >
+              {loading ? "Removendo..." : `Remover Todas (${notasFiscais.length})`}
             </Button>
           </div>
         </DialogContent>

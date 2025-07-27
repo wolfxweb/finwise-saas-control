@@ -352,6 +352,34 @@ def update_accounts_receivable(
     
     return receivable
 
+@router.delete("/", status_code=status.HTTP_204_NO_CONTENT)
+def delete_all_accounts_receivable(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Deletar todas as contas a receber da empresa"""
+    # Buscar todas as contas a receber da empresa
+    receivables = db.query(AccountsReceivable).filter(
+        AccountsReceivable.company_id == current_user.company_id
+    ).all()
+    
+    # Contar quantas serão deletadas
+    count = len(receivables)
+    
+    if count == 0:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Nenhuma conta a receber encontrada para deletar"
+        )
+    
+    # Deletar todas as contas a receber
+    for receivable in receivables:
+        db.delete(receivable)
+    
+    db.commit()
+    
+    return {"message": f"{count} conta(s) a receber deletada(s) com sucesso"}
+
 @router.delete("/{receivable_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_accounts_receivable(
     receivable_id: int,
