@@ -206,7 +206,7 @@ def create_installments(
 @router.get("/", response_model=List[AccountsReceivableList])
 def get_accounts_receivable(
     skip: int = Query(0, ge=0),
-    limit: int = Query(100, ge=1, le=1000),
+    limit: int = Query(1000, ge=1, le=10000),
     search: Optional[str] = None,
     status: Optional[ReceivableStatus] = None,
     customer_id: Optional[int] = None,

@@ -145,19 +145,23 @@ def delete_nota_fiscal(
 @router.get("/check-exists")
 def check_nota_fiscal_exists(
     numero: str,
+    serie: str,
     emitente_cnpj: str,
+    emitente_nome: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Verifica se já existe uma nota fiscal com o mesmo número e emitente"""
+    """Verifica se já existe uma nota fiscal com o mesmo número, série e emitente (CNPJ e nome)"""
     exists = NotaFiscalService.check_nota_fiscal_exists(
-        db, numero, emitente_cnpj, current_user.company_id
+        db, numero, serie, emitente_cnpj, emitente_nome, current_user.company_id
     )
     
     return {
         "exists": exists,
         "numero": numero,
-        "emitente_cnpj": emitente_cnpj
+        "serie": serie,
+        "emitente_cnpj": emitente_cnpj,
+        "emitente_nome": emitente_nome
     }
 
 

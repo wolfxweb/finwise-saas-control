@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { Plus, Search, Filter, Download, Edit, Eye, Receipt, FileText, CheckCircle, Clock, Upload, FileArchive, Trash2, FileDown, ChevronUp, ChevronDown, BarChart3, DollarSign, TrendingUp, MapPin, X, CheckSquare, Square, AlertCircle } from "lucide-react";
+import { Plus, Search, Filter, Download, Edit, Eye, Receipt, FileText, CheckCircle, Clock, Upload, FileArchive, Trash2, FileDown, ChevronUp, ChevronDown, BarChart3, DollarSign, TrendingUp, MapPin, X, CheckSquare, Square, AlertCircle, CalendarIcon } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,9 +9,14 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
 import { notaFiscalAPI, api } from "@/services/api";
 import { toast } from "sonner";
+import { format } from "date-fns";
+import { ptBR } from "date-fns/locale";
 import {
   BarChart,
   Bar,
@@ -25,7 +30,9 @@ import {
   Pie,
   Cell,
   AreaChart,
-  Area
+  Area,
+  LineChart,
+  Line
 } from 'recharts';
 
 export default function NotaFiscal() {
@@ -43,7 +50,13 @@ export default function NotaFiscal() {
     valorMin: '',
     valorMax: '',
     cliente: '',
-    numero: ''
+    numero: '',
+    chaveAcesso: '',
+    serie: '',
+    emitente: '',
+    destinatario: '',
+    origem: '',
+    categoria: ''
   });
   const [importProgress, setImportProgress] = useState(0);
   const [importedCount, setImportedCount] = useState(0);
@@ -55,7 +68,9 @@ export default function NotaFiscal() {
   const [importCategoryId, setImportCategoryId] = useState<number | null>(null);
   const [importCustomerId, setImportCustomerId] = useState<number | null>(null);
   const [importStatus, setImportStatus] = useState<string>('pending');
-  const [createFinancialEntry, setCreateFinancialEntry] = useState<boolean>(true);
+  const [importDueDate, setImportDueDate] = useState<Date | undefined>(undefined);
+  const [shouldCreateFinancialEntry, setShouldCreateFinancialEntry] = useState<boolean>(true);
+  const [handleDuplicates, setHandleDuplicates] = useState<'skip' | 'overwrite'>('skip');
   const [categories, setCategories] = useState<any[]>([]);
   const [customers, setCustomers] = useState<any[]>([]);
   const [selectedFiles, setSelectedFiles] = useState<FileList | null>(null);
@@ -91,15 +106,29 @@ export default function NotaFiscal() {
 
   // Estados para relatórios
   const [periodoRelatorio, setPeriodoRelatorio] = useState('ultimo_mes');
+  
+  // Estados para filtros de relatórios
+  const [filtrosRelatorio, setFiltrosRelatorio] = useState({
+    categoria: '',
+    subcategoria: '',
+    cliente: '',
+    status: '',
+    valorMin: '',
+    valorMax: '',
+    dataInicio: '',
+    dataFim: ''
+  });
 
   const [dadosProdutos, setDadosProdutos] = useState<any[]>([]);
   const [dadosTemporal, setDadosTemporal] = useState<any[]>([]);
+  const [dadosTemporalPorCategoria, setDadosTemporalPorCategoria] = useState<any[]>([]);
 
   const [dadosValor, setDadosValor] = useState<any[]>([]);
 
   // Estados para seleção múltipla
   const [selectedItems, setSelectedItems] = useState<number[]>([]);
   const [selectAll, setSelectAll] = useState(false);
+  const [useFilteredStats, setUseFilteredStats] = useState<boolean>(false);
 
   // Estados para filtros de rentabilidade
   const [filtroRentabilidade, setFiltroRentabilidade] = useState({
@@ -164,7 +193,7 @@ export default function NotaFiscal() {
       console.log('🔄 Processando relatórios com', notasFiscais.length, 'notas fiscais');
       processarDadosRelatorios();
     }
-  }, [notasFiscais, periodoRelatorio]);
+  }, [notasFiscais, periodoRelatorio, filtrosRelatorio]);
 
   const loadNotasFiscais = async () => {
     try {
@@ -236,7 +265,7 @@ export default function NotaFiscal() {
     }
   };
 
-  // Função para calcular estatísticas dos cards
+  // Função para calcular estatísticas dos cards com base em todos os dados
   const calculateStats = (notas: any[]) => {
     const now = new Date();
     const currentMonth = now.getMonth();
@@ -274,6 +303,47 @@ export default function NotaFiscal() {
       pendentes,
       emitidas
     });
+  };
+
+  // Função para calcular estatísticas dos cards com base nos dados filtrados
+  const calculateFilteredStats = () => {
+    const filteredData = applyFilters(notasFiscais);
+    const now = new Date();
+    const currentMonth = now.getMonth();
+    const currentYear = now.getFullYear();
+    
+    // Mês anterior
+    const lastMonth = currentMonth === 0 ? 11 : currentMonth - 1;
+    const lastYear = currentMonth === 0 ? currentYear - 1 : currentYear;
+
+    // Filtrar notas do mês atual (dos dados já filtrados)
+    const notasEsteMes = filteredData.filter(nota => {
+      const dataNota = new Date(nota.data_emissao);
+      return dataNota.getMonth() === currentMonth && dataNota.getFullYear() === currentYear;
+    });
+
+    // Filtrar notas do mês anterior (dos dados já filtrados)
+    const notasMesAnterior = filteredData.filter(nota => {
+      const dataNota = new Date(nota.data_emissao);
+      return dataNota.getMonth() === lastMonth && dataNota.getFullYear() === lastYear;
+    });
+
+    // Calcular valores
+    const valorTotal = notasEsteMes.reduce((sum, nota) => sum + parseFloat(nota.valor_total || 0), 0);
+    const valorMesAnterior = notasMesAnterior.reduce((sum, nota) => sum + parseFloat(nota.valor_total || 0), 0);
+    
+    // Contar por status
+    const pendentes = notasEsteMes.filter(nota => nota.status === 'pendente').length;
+    const emitidas = notasEsteMes.filter(nota => nota.status === 'emitida').length;
+
+    return {
+      nfsEsteMes: notasEsteMes.length,
+      nfsMesAnterior: notasMesAnterior.length,
+      valorTotal,
+      valorMesAnterior,
+      pendentes,
+      emitidas
+    };
   };
 
   const handleViewNotaFiscal = async (id: number) => {
@@ -331,9 +401,9 @@ export default function NotaFiscal() {
     setIsDeleteDialogOpen(true);
   };
 
-  const validateNotaFiscalExists = async (numero: string, emitenteCnpj: string) => {
+  const validateNotaFiscalExists = async (numero: string, serie: string, emitenteCnpj: string, emitenteNome: string) => {
     try {
-      const result = await notaFiscalAPI.checkNotaFiscalExists(numero, emitenteCnpj);
+      const result = await notaFiscalAPI.checkNotaFiscalExists(numero, serie, emitenteCnpj, emitenteNome);
       return result.exists;
     } catch (error) {
       console.error("Erro ao verificar nota fiscal:", error);
@@ -394,55 +464,103 @@ export default function NotaFiscal() {
   // Função para processar XML de NFe
   const parseNFeXML = (xmlContent: string) => {
     try {
+      // Verificar se o conteúdo não está vazio
+      if (!xmlContent || xmlContent.trim().length === 0) {
+        throw new Error("XML vazio");
+      }
+      
       const parser = new DOMParser();
       const xmlDoc = parser.parseFromString(xmlContent, "text/xml");
       
       // Verificar se é um XML válido
       if (xmlDoc.getElementsByTagName("parsererror").length > 0) {
-        throw new Error("XML inválido");
+        const parserError = xmlDoc.getElementsByTagName("parsererror")[0];
+        const errorText = parserError?.textContent || "XML inválido";
+        throw new Error(`XML inválido: ${errorText}`);
       }
 
-      // Extrair dados da NFe
-      const nfe = xmlDoc.querySelector("NFe");
+      // Extrair dados da NFe - tentar com e sem namespace
+      let nfe = xmlDoc.querySelector("NFe");
+      if (!nfe) {
+        // Tentar encontrar NFe usando getElementsByTagName
+        const nfeElements = xmlDoc.getElementsByTagName('NFe');
+        if (nfeElements.length > 0) {
+          nfe = nfeElements[0];
+        }
+      }
       if (!nfe) {
         throw new Error("NFe não encontrada no XML");
       }
 
-      const ide = nfe.querySelector("ide");
-      const emit = nfe.querySelector("emit");
-      const dest = nfe.querySelector("dest");
-      const total = nfe.querySelector("total");
-      const protNFe = xmlDoc.querySelector("protNFe");
+      // Buscar elementos usando getElementsByTagName (mais seguro)
+      const getElement = (parent: Element, tagName: string) => {
+        const elements = parent.getElementsByTagName(tagName);
+        return elements.length > 0 ? elements[0] : null;
+      };
+
+      let ide = getElement(nfe, "ide");
+      let emit = getElement(nfe, "emit");
+      let dest = getElement(nfe, "dest");
+      let total = getElement(nfe, "total");
+      let protNFe = xmlDoc.getElementsByTagName("protNFe").length > 0 ? xmlDoc.getElementsByTagName("protNFe")[0] : null;
 
       if (!ide || !emit || !dest || !total) {
-        throw new Error("Dados incompletos na NFe");
+        const missingElements = [];
+        if (!ide) missingElements.push("ide");
+        if (!emit) missingElements.push("emit");
+        if (!dest) missingElements.push("dest");
+        if (!total) missingElements.push("total");
+        throw new Error(`Dados incompletos na NFe. Elementos faltando: ${missingElements.join(", ")}`);
       }
 
+      // Função auxiliar para buscar elementos com ou sem namespace
+      const getElementText = (parent: Element, tagName: string) => {
+        try {
+          let element = parent.querySelector(tagName);
+          if (!element) {
+            // Tentar com namespace usando uma abordagem mais segura
+            const allElements = parent.getElementsByTagName('*');
+            for (let i = 0; i < allElements.length; i++) {
+              const el = allElements[i];
+              if (el.localName === tagName) {
+                element = el;
+                break;
+              }
+            }
+          }
+          return element?.textContent || "";
+        } catch (error) {
+          console.warn(`Erro ao buscar elemento ${tagName}:`, error);
+          return "";
+        }
+      };
+
       // Extrair informações básicas
-      const numero = ide.querySelector("nNF")?.textContent || "";
-      const serie = ide.querySelector("serie")?.textContent || "";
-      const dataEmissao = ide.querySelector("dhEmi")?.textContent || "";
-      const naturezaOp = ide.querySelector("natOp")?.textContent || "";
+      const numero = getElementText(ide, "nNF");
+      const serie = getElementText(ide, "serie");
+      const dataEmissao = getElementText(ide, "dhEmi");
+      const naturezaOp = getElementText(ide, "natOp");
       
       // Emitente
-      const cnpjEmit = emit.querySelector("CNPJ")?.textContent || "";
-      const nomeEmit = emit.querySelector("xNome")?.textContent || "";
+      const cnpjEmit = getElementText(emit, "CNPJ");
+      const nomeEmit = getElementText(emit, "xNome");
       
       // Destinatário
-      const cpfDest = dest.querySelector("CPF")?.textContent || "";
-      const cnpjDest = dest.querySelector("CNPJ")?.textContent || "";
-      const nomeDest = dest.querySelector("xNome")?.textContent || "";
+      const cpfDest = getElementText(dest, "CPF");
+      const cnpjDest = getElementText(dest, "CNPJ");
+      const nomeDest = getElementText(dest, "xNome");
       
       // Valores
-      const valorTotal = total.querySelector("vNF")?.textContent || "0";
+      const valorTotal = getElementText(total, "vNF");
       
       // Status da autorização
       const status = protNFe ? "Autorizada" : "Pendente";
-      const protocolo = protNFe?.querySelector("nProt")?.textContent || "";
-      const motivo = protNFe?.querySelector("xMotivo")?.textContent || "";
+      const protocolo = protNFe ? getElementText(protNFe, "nProt") : "";
+      const motivo = protNFe ? getElementText(protNFe, "xMotivo") : "";
       
       // Chave de acesso
-      const chave = xmlDoc.querySelector("chNFe")?.textContent || "";
+      const chaveElements = xmlDoc.getElementsByTagName("chNFe");
+      const chave = chaveElements.length > 0 ? chaveElements[0].textContent || "" : "";
 
       return {
         numero: `${serie}-${numero}`,
@@ -461,29 +579,53 @@ export default function NotaFiscal() {
       };
     } catch (error) {
       console.error("Erro ao processar XML:", error);
-      throw new Error(`Erro ao processar XML: ${error instanceof Error ? error.message : 'Erro desconhecido'}`);
+      const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido';
+      throw new Error(`Erro ao processar XML: ${errorMessage}`);
     }
   };
 
     // Função para processar arquivo ZIP
   const processZipFile = async (file: File): Promise<any[]> => {
     try {
+      console.log('📦 Iniciando processamento do ZIP:', file.name);
       const JSZip = await import('jszip');
       const zip = new JSZip.default();
       
       const zipContent = await zip.loadAsync(file);
+      console.log('📦 Arquivos encontrados no ZIP:', Object.keys(zipContent.files));
+      
       const promises: Promise<any>[] = [];
       
       zipContent.forEach((relativePath: string, zipEntry: any) => {
+        // Ignorar arquivos do sistema macOS e diretórios
+        if (zipEntry.name.startsWith('__MACOSX/') || 
+            zipEntry.name.startsWith('._') || 
+            zipEntry.name.includes('/._') ||
+            zipEntry.name.endsWith('/')) {
+          console.log('📦 Ignorando arquivo do sistema:', zipEntry.name);
+          return;
+        }
+        
         if (zipEntry.name.endsWith('.xml')) {
+          console.log('📦 Processando XML do ZIP:', zipEntry.name);
           promises.push(
             zipEntry.async('string').then((content: string) => {
               try {
-                return parseNFeXML(content);
+                const result = parseNFeXML(content);
+                if (result && result.numero) {
+                  console.log('📦 XML processado com sucesso:', result.numero);
+                  return result;
+                } else {
+                  console.warn('📦 XML processado mas sem dados válidos:', zipEntry.name);
+                  return null;
+                }
               } catch (error) {
                 console.error(`Erro ao processar ${zipEntry.name}:`, error);
                 return null;
               }
+            }).catch((error) => {
+              console.error(`Erro ao ler arquivo ${zipEntry.name}:`, error);
+              return null;
             })
           );
         }
@@ -491,6 +633,7 @@ export default function NotaFiscal() {
       
       const results = await Promise.all(promises);
       const validResults = results.filter(result => result !== null);
+      console.log('📦 Total de XMLs válidos processados:', validResults.length);
       return validResults;
     } catch (error) {
       console.error("Erro ao processar arquivo ZIP:", error);
@@ -596,17 +739,25 @@ export default function NotaFiscal() {
               xml_content: xmlContent,
               xml_filename: file.name,
               tipo: importType,
-              origem: importOrigin
+              origem: importOrigin,
+              handle_duplicates: handleDuplicates
             });
             
             console.log('📄 Resposta da API:', response);
+            console.log('📄 Valor de handleDuplicates:', handleDuplicates, 'Tipo:', typeof handleDuplicates);
             
-            // Verificar se a resposta é válida
-            if (!response || !response.data) {
-              console.error('❌ Resposta da API inválida:', response);
-              const errorMessage = `Erro: Resposta inválida da API para ${file.name}`;
-              setImportErrors(prev => [...prev, errorMessage]);
-              toast.error(errorMessage);
+            // Verificar se houve erro na importação
+            if (!response.success) {
+              console.warn('⚠️ Nota fiscal não importada:', response.message);
+              
+              // Se for erro de duplicata, mostrar como aviso
+              if (response.message && response.message.includes('Já existe uma nota fiscal')) {
+                toast.warning(`Nota fiscal ${file.name} já existe no sistema`);
+              } else {
+                const errorMessage = `Erro ao importar ${file.name}: ${response.message}`;
+                setImportErrors(prev => [...prev, errorMessage]);
+                toast.error(errorMessage);
+              }
               continue;
             }
             
@@ -624,11 +775,15 @@ export default function NotaFiscal() {
               continue;
             }
             
-            // Criar lançamento financeiro automaticamente
-            await createFinancialEntry(notaFiscal);
+            // Criar lançamento financeiro se solicitado
+            if (shouldCreateFinancialEntry) {
+              await createFinancialEntry(notaFiscal);
+              toast.success(`Nota fiscal ${file.name} importada e lançamento criado com sucesso!`);
+            } else {
+              toast.success(`Nota fiscal ${file.name} importada com sucesso!`);
+            }
             
             processedCount++;
-            toast.success(`Nota fiscal ${file.name} importada e lançamento criado com sucesso!`);
           } else if (file.name.endsWith('.zip')) {
             // Processar arquivo ZIP
             const zipResults = await processZipFile(file);
@@ -636,21 +791,41 @@ export default function NotaFiscal() {
             // Importar cada XML do ZIP
             for (const xmlData of zipResults) {
               try {
+                // Extrair número da nota fiscal do formato "serie-numero"
+                const numeroNota = xmlData.numero.split('-')[1] || xmlData.numero;
+                console.log('📦 Processando XML do ZIP:', numeroNota, 'Tipo:', importType, 'Origem:', importOrigin, 'Duplicatas:', handleDuplicates);
+                
+                console.log('📦 Enviando XML para API:', {
+                  filename: numeroNota + '.xml',
+                  tipo: importType,
+                  origem: importOrigin,
+                  handle_duplicates: handleDuplicates,
+                  xmlSize: xmlData.xmlContent.length
+                });
+                console.log('📦 Valor de handleDuplicates:', handleDuplicates, 'Tipo:', typeof handleDuplicates);
+                
                 const response = await notaFiscalAPI.importNotaFiscal({
                   xml_content: xmlData.xmlContent,
-                  xml_filename: xmlData.numero + '.xml',
+                  xml_filename: numeroNota + '.xml',
                   tipo: importType,
-                  origem: importOrigin
+                  origem: importOrigin,
+                  handle_duplicates: handleDuplicates
                 });
                 
                 console.log('📄 Resposta da API (ZIP):', response);
                 
-                // Verificar se a resposta é válida
-                if (!response || !response.data) {
-                  console.error('❌ Resposta da API inválida (ZIP):', response);
-                  const errorMessage = `Erro: Resposta inválida da API para ${xmlData.numero}`;
-                  setImportErrors(prev => [...prev, errorMessage]);
-                  toast.error(errorMessage);
+                // Verificar se houve erro na importação
+                if (!response.success) {
+                  console.warn('⚠️ Nota fiscal não importada (ZIP):', response.message);
+                  
+                  // Se for erro de duplicata, mostrar como aviso
+                  if (response.message && response.message.includes('Já existe uma nota fiscal')) {
+                    toast.warning(`Nota fiscal ${numeroNota} já existe no sistema`);
+                  } else {
+                    const errorMessage = `Erro ao importar ${numeroNota}: ${response.message}`;
+                    setImportErrors(prev => [...prev, errorMessage]);
+                    toast.error(errorMessage);
+                  }
                   continue;
                 }
                 
@@ -668,11 +843,15 @@ export default function NotaFiscal() {
                   continue;
                 }
                 
-                // Criar lançamento financeiro automaticamente
-                await createFinancialEntry(notaFiscal);
+                // Criar lançamento financeiro se solicitado
+                if (shouldCreateFinancialEntry) {
+                  await createFinancialEntry(notaFiscal);
+                  toast.success(`Nota fiscal ${numeroNota} importada e lançamento criado com sucesso!`);
+                } else {
+                  toast.success(`Nota fiscal ${numeroNota} importada com sucesso!`);
+                }
                 
                 processedCount++;
-                toast.success(`Nota fiscal ${xmlData.numero} importada e lançamento criado com sucesso!`);
               } catch (error) {
                 const errorMessage = `Erro ao importar nota ${xmlData.numero}: ${error instanceof Error ? error.message : 'Erro desconhecido'}`;
                 setImportErrors(prev => [...prev, errorMessage]);
@@ -696,7 +875,11 @@ export default function NotaFiscal() {
       await loadNotasFiscais();
       
       if (processedCount > 0) {
-        toast.success(`${processedCount} nota(s) fiscal(is) importada(s) e lançamento(s) criado(s) com sucesso!`);
+        if (shouldCreateFinancialEntry) {
+          toast.success(`${processedCount} nota(s) fiscal(is) importada(s) e lançamento(s) criado(s) com sucesso!`);
+        } else {
+          toast.success(`${processedCount} nota(s) fiscal(is) importada(s) com sucesso!`);
+        }
       }
     } catch (error) {
       console.error("Erro durante importação:", error);
@@ -762,9 +945,16 @@ export default function NotaFiscal() {
           new Date(notaFiscal.data_emissao).toISOString().split('T')[0] : 
           new Date().toISOString().split('T')[0];
 
+        console.log('📅 Data de vencimento configurada:', importDueDate ? format(importDueDate, "dd/MM/yyyy") : 'Data atual (padrão)');
+
         // Definir valores baseados no status
         const paidAmount = importStatus === 'paid' ? valorTotal : 0;
         const paymentDate = importStatus === 'paid' ? new Date().toISOString().split('T')[0] : null;
+
+        // Usar data de vencimento informada pelo usuário ou data atual como padrão
+        const dueDate = importDueDate ? 
+          importDueDate.toISOString().split('T')[0] : 
+          new Date().toISOString().split('T')[0];
 
         // Criar conta a receber
         receitaData = {
@@ -774,7 +964,7 @@ export default function NotaFiscal() {
           receivable_type: 'cash',
           total_amount: valorTotal,
           entry_date: entryDate, // Data de emissão da nota como data de entrada (apenas data, sem hora)
-          due_date: new Date().toISOString().split('T')[0], // Data de importação como data de vencimento
+          due_date: dueDate, // Data de vencimento informada pelo usuário ou data atual
           notes: `Importado automaticamente da NF ${notaFiscal.numero || notaFiscal.numero_nota}`,
           reference: notaFiscal.numero || notaFiscal.numero_nota || notaFiscal.chave_acesso, // Número da nota fiscal como referência
           status: importStatus, // Status selecionado na importação
@@ -821,6 +1011,7 @@ export default function NotaFiscal() {
     setImportCategoryId(null);
     setImportCustomerId(null);
     setImportStatus('pending');
+    setShouldCreateFinancialEntry(true);
   };
 
   const mockData = [
@@ -924,7 +1115,9 @@ export default function NotaFiscal() {
           nota.numero?.toLowerCase().includes(searchLower) ||
           nota.destinatario_nome?.toLowerCase().includes(searchLower) ||
           nota.emitente_nome?.toLowerCase().includes(searchLower) ||
-          nota.xml_filename?.toLowerCase().includes(searchLower);
+          nota.xml_filename?.toLowerCase().includes(searchLower) ||
+          nota.chave_acesso?.toLowerCase().includes(searchLower) ||
+          nota.serie?.toLowerCase().includes(searchLower);
         if (!matchesSearch) return false;
       }
 
@@ -939,6 +1132,24 @@ export default function NotaFiscal() {
 
       // Filtro por cliente
       if (filters.cliente && !nota.destinatario_nome?.toLowerCase().includes(filters.cliente.toLowerCase())) return false;
+
+      // Filtro por chave de acesso
+      if (filters.chaveAcesso && !nota.chave_acesso?.includes(filters.chaveAcesso)) return false;
+
+      // Filtro por série
+      if (filters.serie && !nota.serie?.includes(filters.serie)) return false;
+
+      // Filtro por emitente
+      if (filters.emitente && !nota.emitente_nome?.toLowerCase().includes(filters.emitente.toLowerCase())) return false;
+
+      // Filtro por destinatário
+      if (filters.destinatario && !nota.destinatario_nome?.toLowerCase().includes(filters.destinatario.toLowerCase())) return false;
+
+      // Filtro por origem
+      if (filters.origem && nota.origem !== filters.origem) return false;
+
+      // Filtro por categoria
+      if (filters.categoria && nota.categoria_id !== parseInt(filters.categoria)) return false;
 
       // Filtro por data
       if (filters.dataInicio || filters.dataFim) {
@@ -1011,16 +1222,24 @@ export default function NotaFiscal() {
       valorMin: '',
       valorMax: '',
       cliente: '',
-      numero: ''
+      numero: '',
+      chaveAcesso: '',
+      serie: '',
+      emitente: '',
+      destinatario: '',
+      origem: '',
+      categoria: ''
     });
     setSearchTerm('');
     setCurrentPage(1);
+    setUseFilteredStats(false);
   };
 
   // Função para aplicar filtros
   const handleApplyFilters = () => {
     setCurrentPage(1);
     setIsFilterDialogOpen(false);
+    setUseFilteredStats(true);
   };
 
   // Função para verificar se há filtros ativos
@@ -1028,12 +1247,31 @@ export default function NotaFiscal() {
     return Object.values(filters).some(value => value !== '') || searchTerm !== '';
   };
 
+  const limparFiltrosRelatorio = () => {
+    setFiltrosRelatorio({
+      categoria: '',
+      subcategoria: '',
+      cliente: '',
+      status: '',
+      valorMin: '',
+      valorMax: '',
+      dataInicio: '',
+      dataFim: ''
+    });
+  };
+
+  const hasActiveFiltersRelatorio = () => {
+    return Object.values(filtrosRelatorio).some(value => value !== '');
+  };
+
   // Funções para relatórios
   const processarDadosRelatorios = () => {
-    const dadosFiltrados = filtrarPorPeriodo(notasFiscais, periodoRelatorio);
-    console.log('📊 Dados filtrados para relatórios:', dadosFiltrados.length);
+    let dadosFiltrados = filtrarPorPeriodo(notasFiscais, periodoRelatorio);
     
-
+    // Aplicar filtros adicionais de relatório
+    dadosFiltrados = aplicarFiltrosRelatorio(dadosFiltrados);
+    
+    console.log('📊 Dados filtrados para relatórios:', dadosFiltrados.length);
 
     // Dados por produtos
     const produtos = processarDadosProdutos(dadosFiltrados);
@@ -1044,11 +1282,67 @@ export default function NotaFiscal() {
     const temporal = processarDadosTemporal(dadosFiltrados);
     setDadosTemporal(temporal);
 
-
+    // Dados temporais por categoria
+    const temporalPorCategoria = processarDadosTemporalPorCategoria(dadosFiltrados);
+    setDadosTemporalPorCategoria(temporalPorCategoria);
 
     // Dados por faixa de valor
     const valor = processarDadosValor(dadosFiltrados);
     setDadosValor(valor);
+  };
+
+  const aplicarFiltrosRelatorio = (dados: any[]) => {
+    return dados.filter(nota => {
+      // Filtro por categoria
+      if (filtrosRelatorio.categoria && nota.categoria_id?.toString() !== filtrosRelatorio.categoria) {
+        return false;
+      }
+      
+      // Filtro por subcategoria (categoria filha)
+      if (filtrosRelatorio.subcategoria && nota.categoria_id?.toString() !== filtrosRelatorio.subcategoria) {
+        return false;
+      }
+      
+      // Filtro por cliente
+      if (filtrosRelatorio.cliente && !nota.destinatario_nome?.toLowerCase().includes(filtrosRelatorio.cliente.toLowerCase())) {
+        return false;
+      }
+      
+      // Filtro por status
+      if (filtrosRelatorio.status && nota.status !== filtrosRelatorio.status) {
+        return false;
+      }
+      
+      // Filtro por valor mínimo
+      if (filtrosRelatorio.valorMin && parseFloat(nota.valor_total || 0) < parseFloat(filtrosRelatorio.valorMin)) {
+        return false;
+      }
+      
+      // Filtro por valor máximo
+      if (filtrosRelatorio.valorMax && parseFloat(nota.valor_total || 0) > parseFloat(filtrosRelatorio.valorMax)) {
+        return false;
+      }
+      
+      // Filtro por data início
+      if (filtrosRelatorio.dataInicio) {
+        const dataNota = new Date(nota.data_emissao);
+        const dataInicio = new Date(filtrosRelatorio.dataInicio);
+        if (dataNota < dataInicio) {
+          return false;
+        }
+      }
+      
+      // Filtro por data fim
+      if (filtrosRelatorio.dataFim) {
+        const dataNota = new Date(nota.data_emissao);
+        const dataFim = new Date(filtrosRelatorio.dataFim);
+        if (dataNota > dataFim) {
+          return false;
+        }
+      }
+      
+      return true;
+    });
   };
 
   const filtrarPorPeriodo = (dados: any[], periodo: string) => {
@@ -1133,6 +1427,48 @@ export default function NotaFiscal() {
     
     console.log('📊 Resultado produtos:', resultado);
     return resultado;
+  };
+
+  const processarDadosTemporalPorCategoria = (dados: any[]) => {
+    const temporalPorCategoria: { [key: string]: { [key: string]: { quantidade: number; valor: number } } } = {};
+    
+    dados.forEach(nota => {
+      const data = new Date(nota.data_emissao);
+      const mesAno = `${data.getMonth() + 1}/${data.getFullYear()}`;
+      
+      // Obter categoria da nota
+      const categoriaNome = nota.categoria_nome || 'Sem Categoria';
+      
+      if (!temporalPorCategoria[mesAno]) {
+        temporalPorCategoria[mesAno] = {};
+      }
+      
+      if (!temporalPorCategoria[mesAno][categoriaNome]) {
+        temporalPorCategoria[mesAno][categoriaNome] = { quantidade: 0, valor: 0 };
+      }
+      
+      temporalPorCategoria[mesAno][categoriaNome].quantidade += 1;
+      temporalPorCategoria[mesAno][categoriaNome].valor += parseFloat(nota.valor_total || 0);
+    });
+
+    // Converter para formato de linha do gráfico
+    const resultado: any[] = [];
+    
+    Object.entries(temporalPorCategoria).forEach(([periodo, categorias]) => {
+      const linha: any = { periodo };
+      
+      Object.entries(categorias).forEach(([categoria, dados]) => {
+        linha[categoria] = dados.valor;
+      });
+      
+      resultado.push(linha);
+    });
+
+    return resultado.sort((a, b) => {
+      const [mesA, anoA] = a.periodo.split('/');
+      const [mesB, anoB] = b.periodo.split('/');
+      return new Date(parseInt(anoA), parseInt(mesA) - 1).getTime() - new Date(parseInt(anoB), parseInt(mesB) - 1).getTime();
+    });
   };
 
   const processarDadosTemporal = (dados: any[]) => {
@@ -1781,71 +2117,7 @@ export default function NotaFiscal() {
         </Card>
       )}
 
-      {/* Cards de Resumo */}
-      <div className="grid gap-6 md:grid-cols-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">NFs Este Mês</CardTitle>
-            <Receipt className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats.nfsEsteMes}</div>
-            {stats.nfsMesAnterior > 0 && (
-              <p className={`text-xs ${formatVariation(calculateVariation(stats.nfsEsteMes, stats.nfsMesAnterior)).color}`}>
-                {formatVariation(calculateVariation(stats.nfsEsteMes, stats.nfsMesAnterior)).text} vs mês anterior
-              </p>
-            )}
-            {stats.nfsMesAnterior === 0 && stats.nfsEsteMes > 0 && (
-              <p className="text-xs text-green-600">+100% vs mês anterior</p>
-            )}
-            {stats.nfsMesAnterior === 0 && stats.nfsEsteMes === 0 && (
-              <p className="text-xs text-muted-foreground">Nenhuma NF este mês</p>
-            )}
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Valor Total</CardTitle>
-            <FileText className="h-4 w-4 text-success" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-success">
-              R$ {stats.valorTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-            </div>
-            {stats.valorMesAnterior > 0 && (
-              <p className={`text-xs ${formatVariation(calculateVariation(stats.valorTotal, stats.valorMesAnterior)).color}`}>
-                {formatVariation(calculateVariation(stats.valorTotal, stats.valorMesAnterior)).text} vs mês anterior
-              </p>
-            )}
-            {stats.valorMesAnterior === 0 && stats.valorTotal > 0 && (
-              <p className="text-xs text-green-600">+100% vs mês anterior</p>
-            )}
-            {stats.valorMesAnterior === 0 && stats.valorTotal === 0 && (
-              <p className="text-xs text-muted-foreground">Nenhum valor este mês</p>
-            )}
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Pendentes</CardTitle>
-            <Clock className="h-4 w-4 text-warning" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-warning">{stats.pendentes}</div>
-            <p className="text-xs text-muted-foreground">Aguardando emissão</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Emitidas</CardTitle>
-            <CheckCircle className="h-4 w-4 text-primary" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-primary">{stats.emitidas}</div>
-            <p className="text-xs text-muted-foreground">Este mês</p>
-          </CardContent>
-        </Card>
-      </div>
+
 
       {/* Abas de Conteúdo */}
       <Tabs defaultValue="lista" className="space-y-4">
@@ -1856,12 +2128,110 @@ export default function NotaFiscal() {
 
         {/* Aba: Lista de Notas Fiscais */}
         <TabsContent value="lista" className="space-y-4">
+          {/* Cards de Estatísticas */}
+          <div className="grid gap-6 md:grid-cols-4">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">
+                  NFs Este Mês
+                  {useFilteredStats && <Badge variant="secondary" className="ml-2 text-xs">Filtrado</Badge>}
+                </CardTitle>
+                <Receipt className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">
+                  {useFilteredStats ? calculateFilteredStats().nfsEsteMes : stats.nfsEsteMes}
+                </div>
+                {(() => {
+                  const currentStats = useFilteredStats ? calculateFilteredStats() : stats;
+                  return (
+                    <>
+                      {currentStats.nfsMesAnterior > 0 && (
+                        <p className={`text-xs ${formatVariation(calculateVariation(currentStats.nfsEsteMes, currentStats.nfsMesAnterior)).color}`}>
+                          {formatVariation(calculateVariation(currentStats.nfsEsteMes, currentStats.nfsMesAnterior)).text} vs mês anterior
+                        </p>
+                      )}
+                      {currentStats.nfsMesAnterior === 0 && currentStats.nfsEsteMes > 0 && (
+                        <p className="text-xs text-green-600">+100% vs mês anterior</p>
+                      )}
+                      {currentStats.nfsMesAnterior === 0 && currentStats.nfsEsteMes === 0 && (
+                        <p className="text-xs text-muted-foreground">Nenhuma NF este mês</p>
+                      )}
+                    </>
+                  );
+                })()}
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">
+                  Valor Total
+                  {useFilteredStats && <Badge variant="secondary" className="ml-2 text-xs">Filtrado</Badge>}
+                </CardTitle>
+                <FileText className="h-4 w-4 text-success" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-success">
+                  R$ {(useFilteredStats ? calculateFilteredStats().valorTotal : stats.valorTotal).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </div>
+                {(() => {
+                  const currentStats = useFilteredStats ? calculateFilteredStats() : stats;
+                  return (
+                    <>
+                      {currentStats.valorMesAnterior > 0 && (
+                        <p className={`text-xs ${formatVariation(calculateVariation(currentStats.valorTotal, currentStats.valorMesAnterior)).color}`}>
+                          {formatVariation(calculateVariation(currentStats.valorTotal, currentStats.valorMesAnterior)).text} vs mês anterior
+                        </p>
+                      )}
+                      {currentStats.valorMesAnterior === 0 && currentStats.valorTotal > 0 && (
+                        <p className="text-xs text-green-600">+100% vs mês anterior</p>
+                      )}
+                      {currentStats.valorMesAnterior === 0 && currentStats.valorTotal === 0 && (
+                        <p className="text-xs text-muted-foreground">Nenhum valor este mês</p>
+                      )}
+                    </>
+                  );
+                })()}
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">
+                  Pendentes
+                  {useFilteredStats && <Badge variant="secondary" className="ml-2 text-xs">Filtrado</Badge>}
+                </CardTitle>
+                <Clock className="h-4 w-4 text-warning" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-warning">
+                  {useFilteredStats ? calculateFilteredStats().pendentes : stats.pendentes}
+                </div>
+                <p className="text-xs text-muted-foreground">Aguardando emissão</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">
+                  Emitidas
+                  {useFilteredStats && <Badge variant="secondary" className="ml-2 text-xs">Filtrado</Badge>}
+                </CardTitle>
+                <CheckCircle className="h-4 w-4 text-primary" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-primary">
+                  {useFilteredStats ? calculateFilteredStats().emitidas : stats.emitidas}
+                </div>
+                <p className="text-xs text-muted-foreground">Este mês</p>
+              </CardContent>
+            </Card>
+          </div>
+
           {/* Lista de Notas Fiscais */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Controle de Notas Fiscais</CardTitle>
-          <CardDescription>Histórico e status de emissão</CardDescription>
-        </CardHeader>
+          <Card>
+            <CardHeader>
+              <CardTitle>Controle de Notas Fiscais</CardTitle>
+              <CardDescription>Histórico e status de emissão</CardDescription>
+            </CardHeader>
         <CardContent>
           <div className="flex flex-col space-y-4 md:flex-row md:space-y-0 md:space-x-4 mb-6">
             <div className="flex-1">
@@ -2078,6 +2448,151 @@ export default function NotaFiscal() {
 
         {/* Aba: Relatórios */}
         <TabsContent value="relatorios" className="space-y-4">
+          {/* Filtros Globais para Relatórios */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center justify-between">
+                Filtros para Relatórios
+                {hasActiveFiltersRelatorio() && (
+                  <Badge variant="secondary" className="ml-2">Filtros Ativos</Badge>
+                )}
+              </CardTitle>
+              <CardDescription>Configure os filtros para refinar todos os relatórios</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+                <div className="space-y-2">
+                  <Label htmlFor="filtro-categoria">Categoria Principal</Label>
+                  <Select value={filtrosRelatorio.categoria} onValueChange={(value) => setFiltrosRelatorio({...filtrosRelatorio, categoria: value})}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Todas as categorias" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="">Todas as categorias</SelectItem>
+                      {categories.filter(cat => !cat.parent_id).map((category) => (
+                        <SelectItem key={category.id} value={category.id.toString()}>
+                          {category.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="filtro-subcategoria">Subcategoria</Label>
+                  <Select value={filtrosRelatorio.subcategoria} onValueChange={(value) => setFiltrosRelatorio({...filtrosRelatorio, subcategoria: value})}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Todas as subcategorias" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="">Todas as subcategorias</SelectItem>
+                      {categories.filter(cat => cat.parent_id).map((category) => (
+                        <SelectItem key={category.id} value={category.id.toString()}>
+                          {category.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="filtro-cliente">Cliente</Label>
+                  <Input
+                    placeholder="Digite o nome do cliente"
+                    value={filtrosRelatorio.cliente}
+                    onChange={(e) => setFiltrosRelatorio({...filtrosRelatorio, cliente: e.target.value})}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="filtro-status">Status</Label>
+                  <Select value={filtrosRelatorio.status} onValueChange={(value) => setFiltrosRelatorio({...filtrosRelatorio, status: value})}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Todos os status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="">Todos os status</SelectItem>
+                      <SelectItem value="pendente">Pendente</SelectItem>
+                      <SelectItem value="emitida">Emitida</SelectItem>
+                      <SelectItem value="cancelada">Cancelada</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="filtro-valor-min">Valor Mínimo</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    placeholder="0,00"
+                    value={filtrosRelatorio.valorMin}
+                    onChange={(e) => setFiltrosRelatorio({...filtrosRelatorio, valorMin: e.target.value})}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="filtro-valor-max">Valor Máximo</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    placeholder="0,00"
+                    value={filtrosRelatorio.valorMax}
+                    onChange={(e) => setFiltrosRelatorio({...filtrosRelatorio, valorMax: e.target.value})}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="filtro-data-inicio">Data Início</Label>
+                  <Input
+                    type="date"
+                    value={filtrosRelatorio.dataInicio}
+                    onChange={(e) => setFiltrosRelatorio({...filtrosRelatorio, dataInicio: e.target.value})}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="filtro-data-fim">Data Fim</Label>
+                  <Input
+                    type="date"
+                    value={filtrosRelatorio.dataFim}
+                    onChange={(e) => setFiltrosRelatorio({...filtrosRelatorio, dataFim: e.target.value})}
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between pt-4 border-t">
+                <div className="flex items-center space-x-4">
+                  <Button variant="outline" onClick={limparFiltrosRelatorio}>
+                    Limpar Filtros
+                  </Button>
+                  <div className="text-sm text-muted-foreground">
+                    {(() => {
+                      const dadosFiltrados = aplicarFiltrosRelatorio(filtrarPorPeriodo(notasFiscais, periodoRelatorio));
+                      return `${dadosFiltrados.length} notas fiscais encontradas`;
+                    })()}
+                  </div>
+                </div>
+                <div className="flex items-center space-x-4">
+                  <Select value={periodoRelatorio} onValueChange={setPeriodoRelatorio}>
+                    <SelectTrigger className="w-48">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="ultima_semana">Última Semana</SelectItem>
+                      <SelectItem value="ultimo_mes">Último Mês</SelectItem>
+                      <SelectItem value="ultimos_3_meses">Últimos 3 Meses</SelectItem>
+                      <SelectItem value="ultimo_ano">Último Ano</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Button variant="outline">
+                    <Download className="mr-2 h-4 w-4" />
+                    Exportar
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
           {/* Controles de Relatório */}
           <Card>
             <CardHeader>
@@ -2086,67 +2601,81 @@ export default function NotaFiscal() {
             </CardHeader>
             <CardContent>
               <div className="flex items-center justify-between mb-6">
-                <Select value={periodoRelatorio} onValueChange={setPeriodoRelatorio}>
-                  <SelectTrigger className="w-48">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="ultima_semana">Última Semana</SelectItem>
-                    <SelectItem value="ultimo_mes">Último Mês</SelectItem>
-                    <SelectItem value="ultimos_3_meses">Últimos 3 Meses</SelectItem>
-                    <SelectItem value="ultimo_ano">Último Ano</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Button variant="outline">
-                  <Download className="mr-2 h-4 w-4" />
-                  Exportar
-                </Button>
+                <div className="text-sm text-muted-foreground">
+                  Todos os relatórios abaixo refletem os filtros aplicados acima
+                </div>
               </div>
 
               {/* Cards de Resumo */}
               <div className="grid gap-6 md:grid-cols-4 mb-6">
                 <Card>
                   <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-sm font-medium">Total de Notas</CardTitle>
+                    <CardTitle className="text-sm font-medium">
+                      Total de Notas
+                      {hasActiveFiltersRelatorio() && <Badge variant="secondary" className="ml-2 text-xs">Filtrado</Badge>}
+                    </CardTitle>
                     <BarChart3 className="h-4 w-4 text-muted-foreground" />
                   </CardHeader>
                   <CardContent>
-                    <div className="text-2xl font-bold">{notasFiscais.length}</div>
+                    <div className="text-2xl font-bold">
+                      {(() => {
+                        const dadosFiltrados = aplicarFiltrosRelatorio(filtrarPorPeriodo(notasFiscais, periodoRelatorio));
+                        return dadosFiltrados.length;
+                      })()}
+                    </div>
                     <p className="text-xs text-muted-foreground">Período selecionado</p>
                   </CardContent>
                 </Card>
                 <Card>
                   <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-sm font-medium">Valor Total</CardTitle>
+                    <CardTitle className="text-sm font-medium">
+                      Valor Total
+                      {hasActiveFiltersRelatorio() && <Badge variant="secondary" className="ml-2 text-xs">Filtrado</Badge>}
+                    </CardTitle>
                     <DollarSign className="h-4 w-4 text-success" />
                   </CardHeader>
                   <CardContent>
                     <div className="text-2xl font-bold text-success">
-                      R$ {notasFiscais.reduce((sum, nota) => sum + parseFloat(nota.valor_total || 0), 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                      R$ {(() => {
+                        const dadosFiltrados = aplicarFiltrosRelatorio(filtrarPorPeriodo(notasFiscais, periodoRelatorio));
+                        return dadosFiltrados.reduce((sum, nota) => sum + parseFloat(nota.valor_total || 0), 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
+                      })()}
                     </div>
                     <p className="text-xs text-muted-foreground">Faturamento total</p>
                   </CardContent>
                 </Card>
                 <Card>
                   <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-sm font-medium">Ticket Médio</CardTitle>
+                    <CardTitle className="text-sm font-medium">
+                      Ticket Médio
+                      {hasActiveFiltersRelatorio() && <Badge variant="secondary" className="ml-2 text-xs">Filtrado</Badge>}
+                    </CardTitle>
                     <TrendingUp className="h-4 w-4 text-primary" />
                   </CardHeader>
                   <CardContent>
                     <div className="text-2xl font-bold text-primary">
-                      R$ {notasFiscais.length > 0 ? (notasFiscais.reduce((sum, nota) => sum + parseFloat(nota.valor_total || 0), 0) / notasFiscais.length).toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : '0,00'}
+                      R$ {(() => {
+                        const dadosFiltrados = aplicarFiltrosRelatorio(filtrarPorPeriodo(notasFiscais, periodoRelatorio));
+                        return dadosFiltrados.length > 0 ? (dadosFiltrados.reduce((sum, nota) => sum + parseFloat(nota.valor_total || 0), 0) / dadosFiltrados.length).toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : '0,00';
+                      })()}
                     </div>
                     <p className="text-xs text-muted-foreground">Por nota fiscal</p>
                   </CardContent>
                 </Card>
                 <Card>
                   <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-sm font-medium">Regiões Atendidas</CardTitle>
+                    <CardTitle className="text-sm font-medium">
+                      Regiões Atendidas
+                      {hasActiveFiltersRelatorio() && <Badge variant="secondary" className="ml-2 text-xs">Filtrado</Badge>}
+                    </CardTitle>
                     <MapPin className="h-4 w-4 text-warning" />
                   </CardHeader>
                   <CardContent>
                     <div className="text-2xl font-bold text-warning">
-                      {new Set(notasFiscais.map(nota => nota.destinatario_endereco?.estado).filter(Boolean)).size}
+                      {(() => {
+                        const dadosFiltrados = aplicarFiltrosRelatorio(filtrarPorPeriodo(notasFiscais, periodoRelatorio));
+                        return new Set(dadosFiltrados.map(nota => nota.destinatario_endereco?.estado).filter(Boolean)).size;
+                      })()}
                     </div>
                     <p className="text-xs text-muted-foreground">Estados diferentes</p>
                   </CardContent>
@@ -2169,8 +2698,11 @@ export default function NotaFiscal() {
                 <TabsContent value="produtos" className="space-y-4">
                   <Card>
                     <CardHeader>
-                      <CardTitle>Faturamento por Produto</CardTitle>
-                      <CardDescription>Top produtos por valor faturado</CardDescription>
+                      <CardTitle>
+                        Faturamento por Produto
+                        {hasActiveFiltersRelatorio() && <Badge variant="secondary" className="ml-2 text-xs">Filtrado</Badge>}
+                      </CardTitle>
+                      <CardDescription>Top produtos por valor faturado (reflete os filtros aplicados)</CardDescription>
                     </CardHeader>
                     <CardContent>
                       {dadosProdutos.length === 0 ? (
@@ -3192,10 +3724,15 @@ export default function NotaFiscal() {
 
                 {/* Relatório Temporal */}
                 <TabsContent value="temporal" className="space-y-4">
+
+                  {/* Gráfico de Evolução Geral */}
                   <Card>
                     <CardHeader>
-                      <CardTitle>Evolução Temporal</CardTitle>
-                      <CardDescription>Quantidade e valor ao longo do tempo</CardDescription>
+                      <CardTitle>
+                        Evolução Temporal Geral
+                        {hasActiveFiltersRelatorio() && <Badge variant="secondary" className="ml-2 text-xs">Filtrado</Badge>}
+                      </CardTitle>
+                      <CardDescription>Quantidade e valor ao longo do tempo (reflete os filtros aplicados)</CardDescription>
                     </CardHeader>
                     <CardContent>
                       <ResponsiveContainer width="100%" height={400}>
@@ -3212,6 +3749,53 @@ export default function NotaFiscal() {
                       </ResponsiveContainer>
                     </CardContent>
                   </Card>
+
+                  {/* Gráfico de Evolução por Categoria */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>
+                        Evolução por Categoria
+                        {hasActiveFiltersRelatorio() && <Badge variant="secondary" className="ml-2 text-xs">Filtrado</Badge>}
+                      </CardTitle>
+                      <CardDescription>Valor por categoria ao longo do tempo (reflete os filtros aplicados)</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <ResponsiveContainer width="100%" height={400}>
+                        <LineChart data={dadosTemporalPorCategoria}>
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis dataKey="periodo" />
+                          <YAxis />
+                          <Tooltip />
+                          <Legend />
+                          {(() => {
+                            // Obter todas as categorias únicas dos dados
+                            const categorias = new Set<string>();
+                            dadosTemporalPorCategoria.forEach(item => {
+                              Object.keys(item).forEach(key => {
+                                if (key !== 'periodo') {
+                                  categorias.add(key);
+                                }
+                              });
+                            });
+                            
+                            const cores = ['#8884d8', '#82ca9d', '#ffc658', '#ff7300', '#ff0000', '#00ff00', '#0000ff', '#ffff00'];
+                            
+                            return Array.from(categorias).map((categoria, index) => (
+                              <Line
+                                key={categoria}
+                                type="monotone"
+                                dataKey={categoria}
+                                stroke={cores[index % cores.length]}
+                                strokeWidth={2}
+                                dot={{ r: 4 }}
+                                name={categoria}
+                              />
+                            ));
+                          })()}
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </CardContent>
+                  </Card>
                 </TabsContent>
 
 
@@ -3220,8 +3804,11 @@ export default function NotaFiscal() {
                 <TabsContent value="valor" className="space-y-4">
                   <Card>
                     <CardHeader>
-                      <CardTitle>Distribuição por Faixa de Valor</CardTitle>
-                      <CardDescription>Quantidade de notas por faixa de valor</CardDescription>
+                      <CardTitle>
+                        Distribuição por Faixa de Valor
+                        {hasActiveFiltersRelatorio() && <Badge variant="secondary" className="ml-2 text-xs">Filtrado</Badge>}
+                      </CardTitle>
+                      <CardDescription>Quantidade de notas por faixa de valor (reflete os filtros aplicados)</CardDescription>
                     </CardHeader>
                     <CardContent>
                       <ResponsiveContainer width="100%" height={400}>
@@ -3367,6 +3954,43 @@ export default function NotaFiscal() {
               </Select>
             </div>
 
+            {/* Opção para lidar com duplicatas */}
+            <div className="space-y-2">
+              <Label htmlFor="handle-duplicates">Notas Fiscais Duplicadas</Label>
+              <Select value={handleDuplicates} onValueChange={(value: 'skip' | 'overwrite') => setHandleDuplicates(value)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione como lidar com duplicatas" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="skip">Pular (manter existente)</SelectItem>
+                  <SelectItem value="overwrite">Sobrescrever (substituir existente)</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                {handleDuplicates === 'skip' 
+                  ? 'Notas fiscais que já existem serão ignoradas'
+                  : 'Notas fiscais existentes serão substituídas pelos novos dados'
+                }
+              </p>
+            </div>
+
+            {/* Opção para criar lançamento financeiro */}
+            <div className="space-y-2">
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="create-financial-entry"
+                  checked={shouldCreateFinancialEntry}
+                  onCheckedChange={(checked) => setShouldCreateFinancialEntry(checked as boolean)}
+                />
+                <Label htmlFor="create-financial-entry" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                  Criar lançamento financeiro automaticamente
+                </Label>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Se marcado, criará uma conta a receber/pagar baseada na nota fiscal
+              </p>
+            </div>
+
             {/* Tipo de Lançamento Financeiro */}
             <div className="space-y-2">
               <Label htmlFor="import-financial-type">Tipo de Lançamento</Label>
@@ -3432,6 +4056,38 @@ export default function NotaFiscal() {
               </Select>
             </div>
 
+            {/* Data de Vencimento */}
+            <div className="space-y-2">
+              <Label htmlFor="import-due-date">Data de Vencimento</Label>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className="w-full justify-start text-left font-normal"
+                  >
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {importDueDate ? (
+                      format(importDueDate, "PPP", { locale: ptBR })
+                    ) : (
+                      <span className="text-muted-foreground">Selecione uma data</span>
+                    )}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="single"
+                    selected={importDueDate}
+                    onSelect={setImportDueDate}
+                    initialFocus
+                    locale={ptBR}
+                  />
+                </PopoverContent>
+              </Popover>
+              <p className="text-xs text-muted-foreground">
+                Data de vencimento da conta a receber. Se não informada, será usada a data atual.
+              </p>
+            </div>
+
             {/* Botões de Ação */}
             <div className="flex justify-end space-x-2 pt-4">
               <Button variant="outline" onClick={handleCancelImport}>
@@ -3460,7 +4116,7 @@ export default function NotaFiscal() {
           
           <div className="space-y-6">
             {/* Filtros Básicos */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="filter-status">Status</Label>
                 <Select value={filters.status} onValueChange={(value) => setFilters({...filters, status: value})}>
@@ -3507,6 +4163,76 @@ export default function NotaFiscal() {
                   value={filters.cliente}
                   onChange={(e) => setFilters({...filters, cliente: e.target.value})}
                 />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="filter-chave-acesso">Chave de Acesso</Label>
+                <Input
+                  placeholder="Digite a chave de acesso"
+                  value={filters.chaveAcesso}
+                  onChange={(e) => setFilters({...filters, chaveAcesso: e.target.value})}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="filter-serie">Série</Label>
+                <Input
+                  placeholder="Digite a série"
+                  value={filters.serie}
+                  onChange={(e) => setFilters({...filters, serie: e.target.value})}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="filter-emitente">Emitente</Label>
+                <Input
+                  placeholder="Digite o nome do emitente"
+                  value={filters.emitente}
+                  onChange={(e) => setFilters({...filters, emitente: e.target.value})}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="filter-destinatario">Destinatário</Label>
+                <Input
+                  placeholder="Digite o nome do destinatário"
+                  value={filters.destinatario}
+                  onChange={(e) => setFilters({...filters, destinatario: e.target.value})}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="filter-origem">Origem</Label>
+                <Select value={filters.origem} onValueChange={(value) => setFilters({...filters, origem: value})}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Todas as origens" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">Todas as origens</SelectItem>
+                    <SelectItem value="manual">Importação Manual</SelectItem>
+                    <SelectItem value="sefaz">SEFAZ</SelectItem>
+                    <SelectItem value="erp">Sistema ERP</SelectItem>
+                    <SelectItem value="email">Email</SelectItem>
+                    <SelectItem value="api">API Externa</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="filter-categoria">Categoria</Label>
+                <Select value={filters.categoria} onValueChange={(value) => setFilters({...filters, categoria: value})}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Todas as categorias" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">Todas as categorias</SelectItem>
+                    {categories.map((category) => (
+                      <SelectItem key={category.id} value={category.id.toString()}>
+                        {category.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
 
@@ -3596,16 +4322,18 @@ export default function NotaFiscal() {
             try {
               const formData = new FormData(e.currentTarget);
               const numero = formData.get('numero') as string;
+              const serie = formData.get('serie') as string;
               const emitenteCnpj = formData.get('emitenteCnpj') as string;
+              const emitenteNome = formData.get('emitenteNome') as string;
 
               // Validar se a nota fiscal já existe
-              if (numero && emitenteCnpj) {
-                const exists = await validateNotaFiscalExists(numero, emitenteCnpj);
+              if (numero && serie && emitenteCnpj && emitenteNome) {
+                const exists = await validateNotaFiscalExists(numero, serie, emitenteCnpj, emitenteNome);
                 if (exists) {
                   setValidationErrors({
-                    numero: `Já existe uma nota fiscal com o número ${numero} do emitente ${emitenteCnpj}`
+                    numero: `Já existe uma nota fiscal com o número ${numero} série ${serie} do emitente ${emitenteNome} (${emitenteCnpj})`
                   });
-                  toast.error(`Já existe uma nota fiscal com o número ${numero} do emitente ${emitenteCnpj}`);
+                  toast.error(`Já existe uma nota fiscal com o número ${numero} série ${serie} do emitente ${emitenteNome} (${emitenteCnpj})`);
                   setIsSubmitting(false);
                   return;
                 }

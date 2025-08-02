@@ -424,6 +424,7 @@ export const notaFiscalAPI = {
     xml_filename: string;
     tipo: string;
     origem: string;
+    handle_duplicates?: string;
   }) => {
     const response = await api.post('/api/v1/notas-fiscais/import', data);
     return response.data;
@@ -458,9 +459,9 @@ export const notaFiscalAPI = {
   },
 
   // Verificar se nota fiscal já existe
-  checkNotaFiscalExists: async (numero: string, emitenteCnpj: string) => {
+  checkNotaFiscalExists: async (numero: string, serie: string, emitenteCnpj: string, emitenteNome: string) => {
     const response = await api.get('/api/v1/notas-fiscais/check-exists', {
-      params: { numero, emitente_cnpj: emitenteCnpj }
+      params: { numero, serie, emitente_cnpj: emitenteCnpj, emitente_nome: emitenteNome }
     });
     return response.data;
   },

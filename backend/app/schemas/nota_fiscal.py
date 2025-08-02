@@ -171,6 +171,7 @@ class NotaFiscalImport(BaseModel):
     company_id: Optional[UUID] = None
     tipo: str = "entrada"  # entrada ou saida
     origem: str = "manual"  # manual, sefaz, erp, email, api
+    handle_duplicates: str = "skip"  # skip ou overwrite
 
 
 class NotaFiscalResponse(BaseModel):

@@ -199,9 +199,11 @@ class NotaFiscalService:
     def create_nota_fiscal(db: Session, nota_fiscal_data: NotaFiscalCreate) -> NotaFiscal:
         """Cria uma nova nota fiscal no banco de dados"""
         try:
-            # Verificar se já existe uma nota fiscal com o mesmo número e emitente
-            if NotaFiscalService.check_nota_fiscal_exists(db, nota_fiscal_data.numero, nota_fiscal_data.emitente_cnpj, nota_fiscal_data.company_id):
-                raise ValueError(f"Já existe uma nota fiscal com o número {nota_fiscal_data.numero} do emitente {nota_fiscal_data.emitente_cnpj}")
+            # Verificar se já existe uma nota fiscal com o mesmo número, série e emitente (CNPJ e nome)
+            # NOTA: Esta validação já foi feita na função import_xml_nota_fiscal, então não precisamos duplicar aqui
+            # Apenas manter para casos onde create_nota_fiscal é chamada diretamente
+            if NotaFiscalService.check_nota_fiscal_exists(db, nota_fiscal_data.numero, nota_fiscal_data.serie, nota_fiscal_data.emitente_cnpj, nota_fiscal_data.emitente_nome, nota_fiscal_data.company_id):
+                raise ValueError(f"Já existe uma nota fiscal com o número {nota_fiscal_data.numero} série {nota_fiscal_data.serie} do emitente {nota_fiscal_data.emitente_nome} ({nota_fiscal_data.emitente_cnpj})")
             
             # Criar nota fiscal
             db_nota_fiscal = NotaFiscal(
@@ -280,14 +282,34 @@ class NotaFiscalService:
         try:
             print(f"DEBUG: Iniciando importação de XML: {import_data.xml_filename}")
             print(f"DEBUG: Tamanho do XML: {len(import_data.xml_content)} caracteres")
+            print(f"DEBUG: Tipo: {import_data.tipo}")
+            print(f"DEBUG: Origem: {import_data.origem}")
+            print(f"DEBUG: Handle Duplicates: {import_data.handle_duplicates}")
             
             # Parse do XML
             parsed_data = NotaFiscalService.parse_xml_nfe(import_data.xml_content)
             print(f"DEBUG: XML parseado com sucesso. Dados extraídos: {len(parsed_data.get('produtos', []))} produtos")
             
-            # Verificar se já existe uma nota fiscal com o mesmo número e emitente
-            if NotaFiscalService.check_nota_fiscal_exists(db, parsed_data["numero"], parsed_data["emitente_cnpj"], import_data.company_id):
-                raise ValueError(f"Já existe uma nota fiscal com o número {parsed_data['numero']} do emitente {parsed_data['emitente_cnpj']}")
+            # Verificar se já existe uma nota fiscal com o mesmo número, série e emitente (CNPJ e nome)
+            existing_nota = NotaFiscalService.get_nota_fiscal_by_numero_serie_emitente(db, parsed_data["numero"], parsed_data["serie"], parsed_data["emitente_cnpj"], parsed_data["emitente_nome"], import_data.company_id)
+            
+            if existing_nota:
+                print(f"DEBUG: ❌ DUPLICATA ENCONTRADA: Número {parsed_data['numero']} Série {parsed_data['serie']} Emitente {parsed_data['emitente_nome']} ({parsed_data['emitente_cnpj']})")
+                print(f"DEBUG: Ação escolhida: {import_data.handle_duplicates}")
+                
+                if import_data.handle_duplicates == "skip":
+                    print(f"DEBUG: Pulando nota fiscal duplicada")
+                    raise ValueError(f"Já existe uma nota fiscal com o número {parsed_data['numero']} série {parsed_data['serie']} do emitente {parsed_data['emitente_nome']} ({parsed_data['emitente_cnpj']})")
+                elif import_data.handle_duplicates == "overwrite":
+                    # Deletar a nota fiscal existente para sobrescrever
+                    print(f"DEBUG: Sobrescrevendo nota fiscal existente: {parsed_data['numero']} série {parsed_data['serie']} emitente {parsed_data['emitente_nome']}")
+                    NotaFiscalService.delete_nota_fiscal(db, existing_nota.id, import_data.company_id)
+                    print(f"DEBUG: Nota fiscal existente deletada com sucesso")
+                else:
+                    print(f"DEBUG: Valor inválido para handle_duplicates: {import_data.handle_duplicates}")
+                    raise ValueError(f"Valor inválido para handle_duplicates: {import_data.handle_duplicates}")
+            else:
+                print(f"DEBUG: ✅ NOTA PERMITIDA: Número {parsed_data['numero']} Série {parsed_data['serie']} Emitente {parsed_data['emitente_nome']} ({parsed_data['emitente_cnpj']}) - Não é duplicata")
             
             # Criar objeto de criação
             nota_fiscal_create = NotaFiscalCreate(
@@ -379,14 +401,31 @@ class NotaFiscalService:
         return True 
 
     @staticmethod
-    def check_nota_fiscal_exists(db: Session, numero: str, emitente_cnpj: str, company_id: UUID) -> bool:
-        """Verifica se já existe uma nota fiscal com o mesmo número e emitente"""
-        existing_nota = db.query(NotaFiscal).filter(
+    def get_nota_fiscal_by_numero_serie_emitente(db: Session, numero: str, serie: str, emitente_cnpj: str, emitente_nome: str, company_id: UUID):
+        """Busca uma nota fiscal pelo número, série, emitente (CNPJ e nome)"""
+        return db.query(NotaFiscal).filter(
+            and_(
+                NotaFiscal.numero == numero,
+                NotaFiscal.serie == serie,
+                NotaFiscal.emitente_cnpj == emitente_cnpj,
+                NotaFiscal.emitente_nome == emitente_nome,
+                NotaFiscal.company_id == company_id
+            )
+        ).first()
+
+    @staticmethod
+    def get_nota_fiscal_by_numero_emitente(db: Session, numero: str, emitente_cnpj: str, company_id: UUID):
+        """Busca uma nota fiscal pelo número e emitente"""
+        return db.query(NotaFiscal).filter(
             and_(
                 NotaFiscal.numero == numero,
                 NotaFiscal.emitente_cnpj == emitente_cnpj,
                 NotaFiscal.company_id == company_id
             )
         ).first()
-        
+
+    @staticmethod
+    def check_nota_fiscal_exists(db: Session, numero: str, serie: str, emitente_cnpj: str, emitente_nome: str, company_id: UUID) -> bool:
+        """Verifica se já existe uma nota fiscal com o mesmo número, série e emitente (CNPJ e nome)"""
+        existing_nota = NotaFiscalService.get_nota_fiscal_by_numero_serie_emitente(db, numero, serie, emitente_cnpj, emitente_nome, company_id)
         return existing_nota is not None
