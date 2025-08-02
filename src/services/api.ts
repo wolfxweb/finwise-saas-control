@@ -12,19 +12,13 @@ export const api = axios.create({
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('auth_token');
-    console.log('🔍 API Request:', {
-      url: config.url,
-      method: config.method,
-      hasToken: !!token,
-      baseURL: config.baseURL
-    });
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
     return config;
   },
   (error) => {
-    console.error('❌ API Request Error:', error);
+    console.error('API Request Error:', error);
     return Promise.reject(error);
   }
 );

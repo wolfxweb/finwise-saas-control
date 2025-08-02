@@ -17,7 +17,9 @@ from .models.product_component import ProductComponent
 from .models.category import Category
 from .models.customer import Customer
 from .models.accounts_receivable import AccountsReceivable
-from .api.v1 import auth, admin, company, billing, suppliers, nota_fiscal, products, categories, customers, accounts_receivable
+from .models.accounts_payable import AccountsPayable
+from .models.payable_category import PayableCategory
+from .api.v1 import auth, admin, company, billing, suppliers, nota_fiscal, products, categories, customers, accounts_receivable, accounts_payable, payable_categories
 
 # Criar tabelas no banco de dados
 Base.metadata.create_all(bind=engine)
@@ -49,6 +51,8 @@ app.include_router(products.router, prefix=f"{settings.API_V1_STR}/products", ta
 app.include_router(categories.router, prefix=f"{settings.API_V1_STR}/categories", tags=["categories"])
 app.include_router(customers.router, prefix=f"{settings.API_V1_STR}/customers", tags=["customers"])
 app.include_router(accounts_receivable.router, prefix=f"{settings.API_V1_STR}/accounts-receivable", tags=["accounts-receivable"])
+app.include_router(accounts_payable.router, prefix=f"{settings.API_V1_STR}/accounts-payable", tags=["accounts-payable"])
+app.include_router(payable_categories.router, prefix=f"{settings.API_V1_STR}/payable-categories", tags=["payable-categories"])
 
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):

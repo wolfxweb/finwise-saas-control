@@ -30,6 +30,7 @@ class Company(Base):
     users = relationship("User", back_populates="company")
     branches = relationship("Branch", back_populates="company")
     notas_fiscais = relationship("NotaFiscal", back_populates="company")
+    payable_categories = relationship("PayableCategory", back_populates="company")
     # customers = relationship("Customer", back_populates="company")  # Comentado até resolver dependência circular
 
 class Branch(Base):

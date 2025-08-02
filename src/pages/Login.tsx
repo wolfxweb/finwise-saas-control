@@ -43,22 +43,18 @@ const Login = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    console.log('🔍 Submetendo formulário de login...');
     
     try {
       const success = await login(formData.email, formData.password);
-      console.log('📦 Resultado do login:', success);
       
       if (success) {
-        console.log('✅ Login bem-sucedido, redirecionando para:', from);
         // Redirecionar para a página que tentava acessar ou para o app
         navigate(from, { replace: true });
       } else {
-        console.log('❌ Login falhou');
         setError('Email ou senha incorretos');
       }
     } catch (error) {
-      console.error('❌ Erro no login:', error);
+      console.error('Erro no login:', error);
       setError('Erro ao fazer login. Tente novamente.');
     }
   };
