@@ -21,7 +21,7 @@ from .models.accounts_payable import AccountsPayable
 from .models.payable_category import PayableCategory
 from .models.bank import Bank
 from .models.account import Account
-from .api.v1 import auth, admin, company, billing, suppliers, nota_fiscal, products, categories, customers, accounts_receivable, accounts_payable, payable_categories, banks, accounts
+from .api.v1 import auth, admin, company, billing, suppliers, nota_fiscal, products, categories, customers, accounts_receivable, accounts_payable, payable_categories, banks, accounts, cash_flow
 
 # Criar tabelas no banco de dados
 Base.metadata.create_all(bind=engine)
@@ -57,6 +57,7 @@ app.include_router(accounts_payable.router, prefix=f"{settings.API_V1_STR}/accou
 app.include_router(payable_categories.router, prefix=f"{settings.API_V1_STR}/payable-categories", tags=["payable-categories"])
 app.include_router(banks.router, prefix=f"{settings.API_V1_STR}/banks", tags=["banks"])
 app.include_router(accounts.router, prefix=f"{settings.API_V1_STR}/accounts", tags=["accounts"])
+app.include_router(cash_flow.router, prefix=f"{settings.API_V1_STR}/cash-flow", tags=["cash-flow"])
 
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):

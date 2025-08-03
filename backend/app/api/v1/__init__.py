@@ -1,1 +1,1 @@
-from . import auth, admin, company, billing, suppliers, nota_fiscal, products, categories, customers, accounts_receivable 
+from . import auth, admin, company, billing, suppliers, nota_fiscal, products, categories, customers, accounts_receivable, cash_flow 

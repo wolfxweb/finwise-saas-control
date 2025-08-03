@@ -1,10 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import and_, or_, func, desc
 from typing import List, Optional
 from datetime import datetime, date, timedelta
 from decimal import Decimal
 from uuid import UUID
+import calendar
 
 from app.core.database import get_db
 from ..v1.auth import get_current_user
@@ -12,6 +13,7 @@ from app.models.accounts_payable import AccountsPayable, PayableStatus, PayableT
 from app.models.supplier import Supplier
 from app.models.payable_category import PayableCategory
 from app.models.user import User
+from app.models.account import Account
 from app.schemas.accounts_payable import (
     AccountsPayableCreate, AccountsPayableUpdate, AccountsPayableResponse, 
     AccountsPayableList, AccountsPayableSummary, InstallmentCreate, InstallmentResponse
@@ -52,6 +54,20 @@ def create_accounts_payable(
                     detail="Categoria não encontrada"
                 )
         
+        # Verificar se a conta bancária existe (se fornecida)
+        if payable.account_id:
+            from app.models.account import Account
+            account = db.query(Account).filter(
+                Account.id == payable.account_id,
+                Account.company_id == current_user.company_id
+            ).first()
+            
+            if not account:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Conta bancária não encontrada"
+                )
+        
         # Calcular valor da parcela se não fornecido
         total_amount = payable.total_amount
         installment_amount = payable.installment_amount
@@ -64,6 +80,7 @@ def create_accounts_payable(
             company_id=current_user.company_id,
             supplier_id=payable.supplier_id,
             category_id=payable.category_id,
+            account_id=payable.account_id,
             description=payable.description,
             payable_type=payable.payable_type,
             total_amount=total_amount,
@@ -113,6 +130,20 @@ def create_installments(
                 detail="Fornecedor não encontrado"
             )
         
+        # Verificar se a conta bancária existe (se fornecida)
+        if installment_data.account_id:
+            from app.models.account import Account
+            account = db.query(Account).filter(
+                Account.id == installment_data.account_id,
+                Account.company_id == current_user.company_id
+            ).first()
+            
+            if not account:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Conta bancária não encontrada"
+                )
+        
         # Calcular valor da parcela
         total_amount = installment_data.total_amount
         installment_amount = installment_data.installment_amount
@@ -129,10 +160,11 @@ def create_installments(
                 company_id=current_user.company_id,
                 supplier_id=installment_data.supplier_id,
                 category_id=installment_data.category_id,
+                account_id=installment_data.account_id,
                 description=f"{installment_data.description} - Parcela {i+1}/{installment_data.total_installments}",
                 payable_type=PayableType.INSTALLMENT,
                 total_amount=installment_amount,  # Valor da parcela individual
-                entry_date=installment_data.entry_date,
+                entry_date=current_due_date,  # Data de entrada = data de vencimento (lançamento no mês correto)
                 due_date=current_due_date,
                 installment_amount=installment_amount,
                 installment_number=i+1,
@@ -147,8 +179,23 @@ def create_installments(
             db.add(db_payable)
             installments_created += 1
             
-            # Calcular próxima data de vencimento
-            current_due_date = current_due_date + timedelta(days=installment_data.installment_interval_days)
+            # Calcular próxima data de vencimento (próximo mês)
+            # Vamos calcular mês a mês para garantir datas corretas
+            if current_due_date.month == 12:
+                next_month = 1
+                next_year = current_due_date.year + 1
+            else:
+                next_month = current_due_date.month + 1
+                next_year = current_due_date.year
+            
+            # Manter o mesmo dia, mas se não existir no próximo mês, usar o último dia
+            try:
+                current_due_date = current_due_date.replace(year=next_year, month=next_month)
+            except ValueError:
+                # Dia não existe no próximo mês (ex: 31 em fevereiro)
+                # Usar o último dia do mês
+                last_day = calendar.monthrange(next_year, next_month)[1]
+                current_due_date = current_due_date.replace(year=next_year, month=next_month, day=last_day)
         
         db.commit()
         
@@ -215,8 +262,10 @@ def get_accounts_payable(
     # Ordenar por data de vencimento
     query = query.order_by(AccountsPayable.due_date)
     
-    # Paginação
-    payables = query.offset(skip).limit(limit).all()
+    # Paginação com relacionamentos
+    payables = query.options(
+        joinedload(AccountsPayable.account).joinedload(Account.bank)
+    ).offset(skip).limit(limit).all()
     
     return payables
 
@@ -227,7 +276,9 @@ def get_accounts_payable_detail(
     current_user: User = Depends(get_current_user)
 ):
     """Obter detalhes de uma conta a pagar"""
-    payable = db.query(AccountsPayable).filter(
+    payable = db.query(AccountsPayable).options(
+        joinedload(AccountsPayable.account).joinedload(Account.bank)
+    ).filter(
         AccountsPayable.id == payable_id,
         AccountsPayable.company_id == current_user.company_id
     ).first()

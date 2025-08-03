@@ -20,6 +20,7 @@ class AccountsPayableCreate(BaseModel):
     description: str = Field(..., description="Descrição da conta a pagar")
     supplier_id: UUID = Field(..., description="ID do fornecedor")
     category_id: Optional[int] = Field(None, description="ID da categoria")
+    account_id: Optional[int] = Field(None, description="ID da conta bancária")
     payable_type: PayableType = Field(PayableType.CASH, description="Tipo de pagamento")
     total_amount: Decimal = Field(..., description="Valor total")
     entry_date: date = Field(..., description="Data de entrada")
@@ -39,6 +40,7 @@ class AccountsPayableUpdate(BaseModel):
     description: Optional[str] = None
     supplier_id: Optional[UUID] = None
     category_id: Optional[int] = None
+    account_id: Optional[int] = None
     payable_type: Optional[PayableType] = None
     total_amount: Optional[Decimal] = None
     entry_date: Optional[date] = None
@@ -57,6 +59,7 @@ class InstallmentCreate(BaseModel):
     description: str = Field(..., description="Descrição do parcelamento")
     supplier_id: UUID = Field(..., description="ID do fornecedor")
     category_id: Optional[int] = Field(None, description="ID da categoria")
+    account_id: Optional[int] = Field(None, description="ID da conta bancária")
     total_amount: Decimal = Field(..., description="Valor total do parcelamento")
     total_installments: int = Field(..., description="Total de parcelas")
     installment_amount: Optional[Decimal] = Field(None, description="Valor da parcela")
@@ -73,6 +76,8 @@ class AccountsPayableResponse(BaseModel):
     company_id: UUID
     supplier_id: UUID
     category_id: Optional[int] = None
+    account_id: Optional[int] = None
+    account_name: Optional[str] = None
     description: str
     payable_type: PayableType
     status: PayableStatus
@@ -106,6 +111,8 @@ class AccountsPayableList(BaseModel):
     description: str
     supplier_id: UUID
     category_id: Optional[int] = None
+    account_id: Optional[int] = None
+    account_name: Optional[str] = None
     payable_type: PayableType
     status: PayableStatus
     total_amount: Decimal

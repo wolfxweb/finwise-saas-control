@@ -23,6 +23,7 @@ class AccountsPayable(Base):
     company_id = Column(UUID(as_uuid=True), ForeignKey("companies.id"), nullable=False)
     supplier_id = Column(UUID(as_uuid=True), ForeignKey("suppliers.id"), nullable=False)
     category_id = Column(Integer, ForeignKey("payable_categories.id"), nullable=True)
+    account_id = Column(Integer, ForeignKey("accounts.id"), nullable=True)  # Conta bancária para pagamento
     
     # Informações básicas
     description = Column(String(255), nullable=False)
@@ -56,6 +57,7 @@ class AccountsPayable(Base):
     company = relationship("Company")
     supplier = relationship("Supplier")
     category = relationship("PayableCategory", back_populates="accounts_payable")
+    account = relationship("Account")
     
     def __repr__(self):
         return f"<AccountsPayable(id={self.id}, description='{self.description}', amount={self.total_amount})>"
@@ -85,4 +87,11 @@ class AccountsPayable(Base):
     @property
     def is_fixed_cost_bool(self):
         """Converte is_fixed_cost de string para boolean"""
-        return self.is_fixed_cost == 'S' if self.is_fixed_cost else False 
+        return self.is_fixed_cost == 'S' if self.is_fixed_cost else False
+    
+    @property
+    def account_name(self):
+        """Nome da conta bancária para exibição"""
+        if self.account:
+            return f"{self.account.bank.name} - {self.account.account_number}"
+        return None 

@@ -97,6 +97,7 @@ export default function ContasPagar() {
   const [summary, setSummary] = useState<AccountsPayableSummary | null>(null);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [accounts, setAccounts] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [filterStatus, setFilterStatus] = useState<string>("all");
@@ -182,6 +183,7 @@ export default function ContasPagar() {
     description: "",
     supplier_id: "", // UUID como string
     category_id: 0,
+    account_id: 0, // ID da conta bancária
     payable_type: "cash" as "cash" | "installment",
     total_amount: 0,
     entry_date: new Date().toISOString().split('T')[0],
@@ -227,7 +229,8 @@ export default function ContasPagar() {
         loadPayables(),
         loadSummary(),
         loadSuppliers(),
-        loadCategories()
+        loadCategories(),
+        loadAccounts()
       ]);
     } catch (error) {
       console.error("Erro ao carregar dados:", error);
@@ -280,6 +283,16 @@ export default function ContasPagar() {
     }
   };
 
+  const loadAccounts = async () => {
+    try {
+      const response = await api.get("/api/v1/accounts/");
+      const accountsData = response.data || [];
+      setAccounts(accountsData);
+    } catch (error) {
+      console.error("Erro ao carregar contas:", error);
+    }
+  };
+
   const handleCreatePayable = () => {
     setEditingPayable(null);
     setIsViewMode(false);
@@ -289,6 +302,7 @@ export default function ContasPagar() {
       description: "",
       supplier_id: "",
       category_id: 0,
+      account_id: 0,
       payable_type: "cash",
       total_amount: 0,
       entry_date: new Date().toISOString().split('T')[0],
@@ -317,6 +331,7 @@ export default function ContasPagar() {
         description: fullPayable.description,
         supplier_id: fullPayable.supplier_id,
         category_id: fullPayable.category_id || 0,
+        account_id: fullPayable.account_id || 0,
         payable_type: fullPayable.payable_type,
         total_amount: fullPayable.total_amount,
         entry_date: fullPayable.entry_date,
@@ -355,6 +370,7 @@ export default function ContasPagar() {
         description: fullPayable.description,
         supplier_id: fullPayable.supplier_id,
         category_id: fullPayable.category_id || 0,
+        account_id: fullPayable.account_id || 0,
         payable_type: fullPayable.payable_type,
         total_amount: fullPayable.total_amount,
         entry_date: fullPayable.entry_date,
@@ -410,6 +426,7 @@ export default function ContasPagar() {
           description: formData.description,
           supplier_id: formData.supplier_id,
           category_id: formData.category_id === 0 ? null : formData.category_id,
+          account_id: formData.account_id === 0 ? null : formData.account_id,
           total_amount: formData.total_amount,
           total_installments: formData.total_installments,
           installment_amount: formData.installment_amount || null,
@@ -434,6 +451,9 @@ export default function ContasPagar() {
           if (updateData.category_id === 0) {
             updateData.category_id = null;
           }
+          if (updateData.account_id === 0) {
+            updateData.account_id = null;
+          }
           if (updateData.supplier_id === "") {
             updateData.supplier_id = null;
           }
@@ -448,6 +468,9 @@ export default function ContasPagar() {
           const createData = { ...formData };
           if (createData.category_id === 0) {
             createData.category_id = null;
+          }
+          if (createData.account_id === 0) {
+            createData.account_id = null;
           }
           if (createData.supplier_id === "") {
             createData.supplier_id = null;
@@ -1866,6 +1889,26 @@ export default function ContasPagar() {
                       {categories && categories.length > 0 && categories.map((category) => (
                         <SelectItem key={category.id} value={category.id.toString()}>
                           {category.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label htmlFor="account">Conta Bancária</Label>
+                  <Select
+                    value={formData.account_id.toString()}
+                    onValueChange={(value) => setFormData(prev => ({ ...prev, account_id: parseInt(value) || 0 }))}
+                    disabled={isViewMode}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione uma conta" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="0">Sem conta</SelectItem>
+                      {accounts && accounts.length > 0 && accounts.map((account) => (
+                        <SelectItem key={account.id} value={account.id.toString()}>
+                          {account.bank_name} - {account.account_number}
                         </SelectItem>
                       ))}
                     </SelectContent>
