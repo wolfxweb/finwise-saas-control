@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectGroup, SelectLabel } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
@@ -1895,22 +1895,73 @@ export default function ContasPagar() {
                   </Select>
                 </div>
                 <div>
-                  <Label htmlFor="account">Conta Bancária</Label>
+                  <Label htmlFor="account">Forma de Pagamento</Label>
                   <Select
                     value={formData.account_id.toString()}
                     onValueChange={(value) => setFormData(prev => ({ ...prev, account_id: parseInt(value) || 0 }))}
                     disabled={isViewMode}
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder="Selecione uma conta" />
+                      <SelectValue placeholder="Selecione a forma de pagamento" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="0">Sem conta</SelectItem>
-                      {accounts && accounts.length > 0 && accounts.map((account) => (
-                        <SelectItem key={account.id} value={account.id.toString()}>
-                          {account.bank_name} - {account.account_number}
-                        </SelectItem>
-                      ))}
+                      <SelectItem value="0">Sem forma de pagamento</SelectItem>
+                      
+                      {/* Contas Bancárias */}
+                      {accounts && accounts.filter(account => 
+                        account.account_type === 'checking' || 
+                        account.account_type === 'savings' || 
+                        account.account_type === 'investment'
+                      ).length > 0 && (
+                        <>
+                          <SelectGroup>
+                            <SelectLabel>Contas Bancárias</SelectLabel>
+                            {accounts
+                              .filter(account => 
+                                account.account_type === 'checking' || 
+                                account.account_type === 'savings' || 
+                                account.account_type === 'investment'
+                              )
+                              .map((account) => (
+                                <SelectItem key={account.id} value={account.id.toString()}>
+                                  {account.bank_name} - {account.account_number} ({account.holder_name})
+                                </SelectItem>
+                              ))}
+                          </SelectGroup>
+                        </>
+                      )}
+                      
+                      {/* Cartões de Crédito */}
+                      {accounts && accounts.filter(account => account.account_type === 'credit').length > 0 && (
+                        <>
+                          <SelectGroup>
+                            <SelectLabel>Cartões de Crédito</SelectLabel>
+                            {accounts
+                              .filter(account => account.account_type === 'credit')
+                              .map((account) => (
+                                <SelectItem key={account.id} value={account.id.toString()}>
+                                  💳 {account.bank_name} - Final {account.account_number.slice(-4)} ({account.holder_name})
+                                </SelectItem>
+                              ))}
+                          </SelectGroup>
+                        </>
+                      )}
+                      
+                      {/* Cartões de Débito */}
+                      {accounts && accounts.filter(account => account.account_type === 'debit').length > 0 && (
+                        <>
+                          <SelectGroup>
+                            <SelectLabel>Cartões de Débito</SelectLabel>
+                            {accounts
+                              .filter(account => account.account_type === 'debit')
+                              .map((account) => (
+                                <SelectItem key={account.id} value={account.id.toString()}>
+                                  💳 {account.bank_name} - Final {account.account_number.slice(-4)} ({account.holder_name})
+                                </SelectItem>
+                              ))}
+                          </SelectGroup>
+                        </>
+                      )}
                     </SelectContent>
                   </Select>
                 </div>

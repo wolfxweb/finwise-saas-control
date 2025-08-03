@@ -13,10 +13,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart as RechartsPieChart, Cell, Pie } from 'recharts';
+import { LineChart, Line, BarChart, Bar, PieChart as RechartsPieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import { toast } from "sonner";
-import { api } from "@/services/api";
-import { format } from "date-fns";
+import api from "@/services/api";
+import { format, addDays, subDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
 interface CashFlowMovement {
@@ -36,6 +36,10 @@ interface CashFlowMovement {
   payment_date?: string;
   notes?: string;
   customer_supplier?: string;
+  movement_type?: string; // Added for Contas a Pagar
+  total_amount?: number; // Added for Contas a Pagar
+  installment_number?: number; // Added for Contas a Pagar
+  total_installments?: number; // Added for Contas a Pagar
 }
 
 interface CashFlowMovementsPaginated {
@@ -44,6 +48,7 @@ interface CashFlowMovementsPaginated {
   page: number;
   limit: number;
   total_pages: number;
+  current_page: number; // Added for Contas a Pagar
 }
 
 interface CashFlowSummary {
@@ -136,6 +141,7 @@ export default function FluxoCaixa() {
   const [categoriesSummary, setCategoriesSummary] = useState<CategoriesSummary | null>(null);
   const [filterOptions, setFilterOptions] = useState<FilterOptions | null>(null);
   const [dreData, setDreData] = useState<DREResponse | null>(null);
+  const [payablesByMonth, setPayablesByMonth] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedMovement, setSelectedMovement] = useState<CashFlowMovement | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
@@ -245,7 +251,8 @@ export default function FluxoCaixa() {
         loadMovements(),
         loadCategoriesSummary(),
         loadFilterOptions(),
-        loadDRE()
+        loadDRE(),
+        loadPayablesByMonth()
       ]);
       
       // Carregar resumo
@@ -261,6 +268,54 @@ export default function FluxoCaixa() {
       toast.error('Erro ao carregar dados do fluxo de caixa');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadPayablesByMonth = async () => {
+    try {
+      // Gerar dados para 12 meses (6 anteriores + atual + 5 próximos)
+      const currentDate = new Date();
+      const months = [];
+      
+      // Gerar os meses
+      for (let i = -6; i <= 5; i++) {
+        const monthDate = new Date(currentDate.getFullYear(), currentDate.getMonth() + i, 1);
+        const startDate = format(monthDate, 'yyyy-MM-dd');
+        const endDate = format(new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 0), 'yyyy-MM-dd');
+        
+        // Buscar dados do mês
+        const params = new URLSearchParams({
+          start_date: startDate,
+          end_date: endDate,
+          movement_type: 'saida',
+          limit: '1000' // Pegar todos os registros do mês
+        });
+        
+        try {
+          const response = await api.get(`/api/v1/cash-flow/movements?${params}`);
+          const total = response.data.movements.reduce((sum: number, movement: any) => {
+            return sum + (movement.total_amount || 0);
+          }, 0);
+          
+          months.push({
+            month: format(monthDate, 'MMM/yy', { locale: ptBR }),
+            total: total,
+            isCurrentMonth: i === 0
+          });
+        } catch (error) {
+          console.error(`Erro ao carregar dados do mês ${format(monthDate, 'MM/yyyy')}:`, error);
+          months.push({
+            month: format(monthDate, 'MMM/yy', { locale: ptBR }),
+            total: 0,
+            isCurrentMonth: i === 0
+          });
+        }
+      }
+      
+      setPayablesByMonth(months);
+    } catch (error) {
+      console.error('Erro ao carregar contas a pagar por mês:', error);
+      toast.error('Erro ao carregar dados do gráfico');
     }
   };
 
@@ -285,6 +340,12 @@ export default function FluxoCaixa() {
       loadDRE();
     }
   }, [activeTab, startDate, endDate, drePeriodFilter]);
+
+  useEffect(() => {
+    if (!loading && activeTab === "contas") {
+      loadPayablesByMonth();
+    }
+  }, [activeTab]);
 
   const handleViewMovement = (movement: CashFlowMovement) => {
     setSelectedMovement(movement);
@@ -1185,65 +1246,295 @@ export default function FluxoCaixa() {
 
         {/* Aba: Contas a Receber e Pagar */}
         <TabsContent value="contas" className="space-y-6">
-          <div className="grid gap-6 md:grid-cols-2">
-            <Card>
-              <CardHeader>
-                <CardTitle>Contas a Receber</CardTitle>
-                <CardDescription>Vencimentos futuros e status</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  <div className="flex justify-between">
-                    <span>Total a Receber</span>
-                    <span className="font-semibold text-success">
-                      {summary ? formatCurrency(summary.pending_receivables) : 'R$ 0,00'}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Vencidos</span>
-                    <span className="font-semibold text-destructive">
-                      {summary ? formatCurrency(summary.overdue_receivables) : 'R$ 0,00'}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Próximos 30 dias</span>
-                    <span className="font-semibold text-blue-600">
-                      {forecast.length > 0 ? formatCurrency(forecast.slice(0, 30).reduce((sum, f) => sum + f.receivables, 0)) : 'R$ 0,00'}
-                    </span>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+          <Tabs defaultValue="contas-pagar" className="w-full">
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="contas-pagar">Contas a Pagar</TabsTrigger>
+              <TabsTrigger value="contas-receber">Contas a Receber</TabsTrigger>
+            </TabsList>
 
-            <Card>
-              <CardHeader>
-                <CardTitle>Contas a Pagar</CardTitle>
-                <CardDescription>Vencimentos futuros e status</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  <div className="flex justify-between">
-                    <span>Total a Pagar</span>
-                    <span className="font-semibold text-destructive">
-                      {summary ? formatCurrency(summary.pending_payables) : 'R$ 0,00'}
-                    </span>
+            {/* Sub-aba: Contas a Pagar */}
+            <TabsContent value="contas-pagar" className="space-y-6">
+              {/* Filtros */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Filtros - Contas a Pagar</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex flex-col space-y-4 md:flex-row md:space-y-0 md:space-x-4">
+                    <div className="flex-1">
+                      <Input
+                        placeholder="Buscar por descrição..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="w-full"
+                      />
+                    </div>
+                    <Select value={statusFilter} onValueChange={setStatusFilter}>
+                      <SelectTrigger className="w-40">
+                        <SelectValue placeholder="Status" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="">Todos</SelectItem>
+                        <SelectItem value="pending">Pendente</SelectItem>
+                        <SelectItem value="paid">Pago</SelectItem>
+                        <SelectItem value="overdue">Vencido</SelectItem>
+                        <SelectItem value="cancelled">Cancelado</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Select value={accountFilter} onValueChange={setAccountFilter}>
+                      <SelectTrigger className="w-40">
+                        <SelectValue placeholder="Conta/Cartão" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="">Todas</SelectItem>
+                        {filterOptions?.accounts.map((account) => (
+                          <SelectItem key={account.id} value={account.id.toString()}>
+                            {account.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button variant="outline" className="w-40">
+                          <CalendarIcon className="mr-2 h-4 w-4" />
+                          {startDate ? format(startDate, "dd/MM/yyyy", { locale: ptBR }) : "Data Início"}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0">
+                        <CalendarComponent
+                          mode="single"
+                          selected={startDate}
+                          onSelect={setStartDate}
+                          initialFocus
+                        />
+                      </PopoverContent>
+                    </Popover>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button variant="outline" className="w-40">
+                          <CalendarIcon className="mr-2 h-4 w-4" />
+                          {endDate ? format(endDate, "dd/MM/yyyy", { locale: ptBR }) : "Data Fim"}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0">
+                        <CalendarComponent
+                          mode="single"
+                          selected={endDate}
+                          onSelect={setEndDate}
+                          initialFocus
+                        />
+                      </PopoverContent>
+                    </Popover>
+                    <Button variant="outline" onClick={() => {
+                      setStartDate(undefined);
+                      setEndDate(undefined);
+                      setSearchTerm("");
+                      setStatusFilter("");
+                      setAccountFilter("");
+                    }}>
+                      <X className="mr-2 h-4 w-4" />
+                      Limpar
+                    </Button>
                   </div>
-                  <div className="flex justify-between">
-                    <span>Vencidos</span>
-                    <span className="font-semibold text-destructive">
-                      {summary ? formatCurrency(summary.overdue_payables) : 'R$ 0,00'}
-                    </span>
+                </CardContent>
+              </Card>
+
+              {/* Gráfico de Barras - Total a Pagar por Mês */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Total a Pagar por Mês</CardTitle>
+                  <CardDescription>Últimos 6 meses, mês atual e próximos 5 meses</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {payablesByMonth && payablesByMonth.length > 0 ? (
+                    <ResponsiveContainer width="100%" height={300}>
+                      <BarChart data={payablesByMonth}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis 
+                          dataKey="month" 
+                          tick={{ fontSize: 12 }}
+                          angle={-45}
+                          textAnchor="end"
+                          height={60}
+                        />
+                        <YAxis tickFormatter={(value) => formatCurrency(value || 0)} />
+                        <Tooltip 
+                          formatter={(value) => [formatCurrency(Number(value) || 0), "Total a Pagar"]}
+                          labelFormatter={(label) => `Mês: ${label}`}
+                        />
+                        <Bar 
+                          dataKey="total" 
+                          name="Total a Pagar"
+                          radius={[4, 4, 0, 0]}
+                        >
+                          {payablesByMonth.map((entry, index) => (
+                            <Cell 
+                              key={`cell-${index}`} 
+                              fill={entry.isCurrentMonth ? "#dc2626" : "#ef4444"} 
+                            />
+                          ))}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <div className="flex items-center justify-center h-[300px] text-muted-foreground">
+                      <div className="text-center">
+                        <BarChart3 className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                        <p>Nenhum dado encontrado para o gráfico</p>
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Tabela de Contas a Pagar */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Lista de Contas a Pagar</CardTitle>
+                  <CardDescription>
+                    {movementsPaginated ? `${movementsPaginated.total} contas encontradas` : 'Carregando...'}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="rounded-md border">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Descrição</TableHead>
+                          <TableHead>Fornecedor</TableHead>
+                          <TableHead>Categoria</TableHead>
+                          <TableHead>Conta/Cartão</TableHead>
+                          <TableHead>Vencimento</TableHead>
+                          <TableHead className="text-right">Valor</TableHead>
+                          <TableHead>Status</TableHead>
+                          <TableHead>Ações</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {movementsPaginated?.movements
+                          .filter(movement => movement.movement_type === 'saida')
+                          .map((movement) => (
+                            <TableRow key={movement.id}>
+                              <TableCell className="font-medium">
+                                {movement.description}
+                                {movement.installment_number && movement.total_installments && (
+                                  <div className="text-xs text-muted-foreground">
+                                    Parcela {movement.installment_number}/{movement.total_installments}
+                                  </div>
+                                )}
+                              </TableCell>
+                              <TableCell>{movement.customer_supplier || 'N/A'}</TableCell>
+                              <TableCell>{movement.category || 'N/A'}</TableCell>
+                              <TableCell>{movement.account || 'N/A'}</TableCell>
+                              <TableCell>
+                                {movement.due_date ? format(new Date(movement.due_date), "dd/MM/yyyy", { locale: ptBR }) : 'N/A'}
+                              </TableCell>
+                              <TableCell className="text-right font-medium">
+                                {formatCurrency(movement.total_amount)}
+                              </TableCell>
+                              <TableCell>
+                                <Badge 
+                                  variant={
+                                    movement.status_display === 'Pago' ? 'default' : 
+                                    movement.status_display === 'Vencido' ? 'destructive' : 
+                                    'secondary'
+                                  }
+                                >
+                                  {movement.status_display}
+                                </Badge>
+                              </TableCell>
+                              <TableCell>
+                                <div className="flex space-x-2">
+                                  <Button 
+                                    variant="outline" 
+                                    size="sm" 
+                                    onClick={() => handleViewMovement(movement)}
+                                  >
+                                    <Eye className="h-4 w-4" />
+                                  </Button>
+                                  <Button 
+                                    variant="outline" 
+                                    size="sm" 
+                                    onClick={() => handleEditMovement(movement)}
+                                  >
+                                    <Edit className="h-4 w-4" />
+                                  </Button>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                      </TableBody>
+                    </Table>
                   </div>
-                  <div className="flex justify-between">
-                    <span>Próximos 30 dias</span>
-                    <span className="font-semibold text-orange-600">
-                      {forecast.length > 0 ? formatCurrency(forecast.slice(0, 30).reduce((sum, f) => sum + f.payables, 0)) : 'R$ 0,00'}
-                    </span>
+
+                  {/* Paginação */}
+                  {movementsPaginated && movementsPaginated.total_pages > 1 && (
+                    <div className="flex items-center justify-between space-x-2 py-4">
+                      <div className="text-sm text-muted-foreground">
+                        Página {movementsPaginated.current_page} de {movementsPaginated.total_pages}
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+                          disabled={currentPage <= 1}
+                        >
+                          <ChevronLeft className="h-4 w-4" />
+                          Anterior
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setCurrentPage(Math.min(movementsPaginated.total_pages, currentPage + 1))}
+                          disabled={currentPage >= movementsPaginated.total_pages}
+                        >
+                          Próxima
+                          <ChevronRight className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            {/* Sub-aba: Contas a Receber */}
+            <TabsContent value="contas-receber" className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Contas a Receber</CardTitle>
+                  <CardDescription>Vencimentos futuros e status</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    <div className="flex justify-between">
+                      <span>Total a Receber</span>
+                      <span className="font-semibold text-success">
+                        {summary ? formatCurrency(summary.pending_receivables) : 'R$ 0,00'}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Em Atraso</span>
+                      <span className="font-semibold text-destructive">
+                        {summary ? formatCurrency(summary.overdue_receivables) : 'R$ 0,00'}
+                      </span>
+                    </div>
+                    <div className="text-sm text-muted-foreground">
+                      <p>• Próximos vencimentos: Esta semana</p>
+                      <p>• Maior valor: {summary ? formatCurrency(summary.pending_receivables) : 'R$ 0,00'}</p>
+                      <p>• Status de cobrança automatizada</p>
+                    </div>
+                    <Button className="w-full">
+                      <Plus className="mr-2 h-4 w-4" />
+                      Adicionar Conta a Receber
+                    </Button>
                   </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+          </Tabs>
         </TabsContent>
 
         {/* Aba: Previsão de Caixa */}
