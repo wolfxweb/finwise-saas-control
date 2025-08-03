@@ -8,7 +8,7 @@ from sqlalchemy import text
 from ...core.database import get_db
 from ...models.user import User
 from ...models.company import Company
-from ...models.plan import Plan, Module, CompanyModule, PlanModule
+from ...models.plan import Plan, Module, CompanyModule, PlanModule, CompanySubscription
 from ...schemas.admin import (
     CompanyList, 
     PlanList, 
@@ -385,11 +385,41 @@ def update_plan(
                     is_included=True
                 )
                 db.add(plan_module)
+        
+        # Atualizar módulos de todas as empresas que usam este plano
+        companies_using_plan = db.query(Company).filter(Company.plan_type == plan.name).all()
+        
+        for company in companies_using_plan:
+            # Buscar a assinatura ativa da empresa (incluindo trial)
+            subscription = db.query(CompanySubscription).filter(
+                CompanySubscription.company_id == company.id,
+                CompanySubscription.status.in_(["active", "trial"])
+            ).first()
+            
+            if subscription:
+                # Remover todos os módulos atuais da empresa
+                db.query(CompanyModule).filter(
+                    CompanyModule.subscription_id == subscription.id
+                ).delete()
+                
+                # Adicionar os novos módulos baseados no plano atualizado
+                for module_code in modules:
+                    module = db.query(Module).filter(Module.code == module_code).first()
+                    if module:
+                        company_module = CompanyModule(
+                            company_id=company.id,
+                            module_id=module.id,
+                            subscription_id=subscription.id,
+                            status="active",
+                            price=module.price,
+                            start_date=subscription.start_date
+                        )
+                        db.add(company_module)
     
     db.commit()
     db.refresh(plan)
     
-    return {"message": "Plano atualizado com sucesso"}
+    return {"message": "Plano atualizado com sucesso e módulos das empresas atualizados"}
 
 @router.delete("/plans/{plan_id}")
 def delete_plan(

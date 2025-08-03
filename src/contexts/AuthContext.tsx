@@ -40,8 +40,8 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 const getPlanModules = (planType: string): string[] => {
   const planModules = {
     'Básico': ['cash_flow', 'accounts_receivable', 'products', 'inventory'],
-    'Profissional': ['cash_flow', 'accounts_receivable', 'accounts_payable', 'cost_center', 'products', 'inventory', 'suppliers', 'purchases'],
-    'Empresarial': ['cash_flow', 'accounts_receivable', 'accounts_payable', 'cost_center', 'products', 'inventory', 'suppliers', 'purchases', 'shipping', 'orders', 'marketplace', 'invoice', 'users', 'support']
+    'Profissional': ['cash_flow', 'accounts_receivable', 'accounts_payable', 'cost_center', 'products', 'inventory', 'suppliers', 'purchases', 'accounts'],
+    'Empresarial': ['cash_flow', 'accounts_receivable', 'accounts_payable', 'cost_center', 'products', 'inventory', 'suppliers', 'purchases', 'shipping', 'orders', 'marketplace', 'invoice', 'users', 'support', 'accounts']
   };
   
   return planModules[planType as keyof typeof planModules] || planModules['Básico'];

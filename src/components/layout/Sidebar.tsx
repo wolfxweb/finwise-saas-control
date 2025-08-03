@@ -73,6 +73,12 @@ const menuItems: MenuItem[] = [
         icon: Building2,
         module: "cost_center",
       },
+      {
+        title: "Contas",
+        href: "/app/contas",
+        icon: CreditCard,
+        module: "accounts",
+      },
     ],
   },
   {

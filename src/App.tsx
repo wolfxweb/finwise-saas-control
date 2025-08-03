@@ -26,6 +26,7 @@ import FluxoCaixa from "./pages/financeiro/FluxoCaixa";
 import ContasReceber from "./pages/financeiro/ContasReceber";
 import ContasPagar from "./pages/financeiro/ContasPagar";
 import CentroCustos from "./pages/financeiro/CentroCustos";
+import Contas from "./pages/financeiro/Contas";
 import Produtos from "./pages/Produtos";
 import Estoque from "./pages/Estoque";
 import Compras from "./pages/Compras";
@@ -107,6 +108,11 @@ const App = () => (
               <Route path="centro-custos" element={
                 <ProtectedRoute requiredModules={['cost_center']}>
                   <CentroCustos />
+                </ProtectedRoute>
+              } />
+              <Route path="contas" element={
+                <ProtectedRoute requiredModules={['accounts']}>
+                  <Contas />
                 </ProtectedRoute>
               } />
               
