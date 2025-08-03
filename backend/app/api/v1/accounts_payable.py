@@ -74,6 +74,7 @@ def create_accounts_payable(
             total_installments=payable.total_installments,
             notes=payable.notes,
             reference=payable.reference,
+            is_fixed_cost='S' if payable.is_fixed_cost else 'N',
             status=payable.status,
             paid_amount=payable.paid_amount or 0,
             payment_date=payable.payment_date
@@ -130,7 +131,7 @@ def create_installments(
                 category_id=installment_data.category_id,
                 description=f"{installment_data.description} - Parcela {i+1}/{installment_data.total_installments}",
                 payable_type=PayableType.INSTALLMENT,
-                total_amount=installment_amount,
+                total_amount=installment_amount,  # Valor da parcela individual
                 entry_date=installment_data.entry_date,
                 due_date=current_due_date,
                 installment_amount=installment_amount,
@@ -138,6 +139,7 @@ def create_installments(
                 total_installments=installment_data.total_installments,
                 notes=installment_data.notes,
                 reference=installment_data.reference,
+                is_fixed_cost='S' if installment_data.is_fixed_cost else 'N',
                 status=PayableStatus.PENDING,
                 paid_amount=0
             )
@@ -259,6 +261,10 @@ def update_accounts_payable(
     
     # Atualizar campos fornecidos
     update_data = payable_update.dict(exclude_unset=True)
+    
+    # Tratar campo is_fixed_cost
+    if 'is_fixed_cost' in update_data:
+        update_data['is_fixed_cost'] = 'S' if update_data['is_fixed_cost'] else 'N'
     
     for field, value in update_data.items():
         setattr(db_payable, field, value)

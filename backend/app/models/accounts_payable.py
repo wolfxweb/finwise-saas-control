@@ -46,6 +46,7 @@ class AccountsPayable(Base):
     # Informações adicionais
     notes = Column(Text, nullable=True)
     reference = Column(String(100), nullable=True)  # Referência externa
+    is_fixed_cost = Column(String(1), default='N')  # Custo fixo (S/N)
     
     # Metadados
     created_at = Column(DateTime(timezone=True), server_default=func.now())

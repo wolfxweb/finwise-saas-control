@@ -33,6 +33,7 @@ class AccountsPayableCreate(BaseModel):
     installment_amount: Optional[Decimal] = Field(None, description="Valor da parcela")
     installment_interval_days: int = Field(30, description="Intervalo entre parcelas em dias")
     first_due_date: Optional[date] = Field(None, description="Data de vencimento da primeira parcela")
+    is_fixed_cost: Optional[bool] = Field(False, description="Indica se é um custo fixo")
 
 class AccountsPayableUpdate(BaseModel):
     description: Optional[str] = None
@@ -49,6 +50,7 @@ class AccountsPayableUpdate(BaseModel):
     payment_date: Optional[date] = None
     total_installments: Optional[int] = None
     installment_amount: Optional[Decimal] = None
+    is_fixed_cost: Optional[bool] = None
 
 # Schema para parcelamento
 class InstallmentCreate(BaseModel):
@@ -63,6 +65,7 @@ class InstallmentCreate(BaseModel):
     installment_interval_days: int = Field(30, description="Intervalo entre parcelas em dias")
     notes: Optional[str] = Field(None, description="Observações")
     reference: Optional[str] = Field(None, description="Referência externa")
+    is_fixed_cost: Optional[bool] = Field(False, description="Indica se é um custo fixo")
 
 # Schemas para resposta
 class AccountsPayableResponse(BaseModel):
@@ -83,6 +86,7 @@ class AccountsPayableResponse(BaseModel):
     installment_amount: Optional[Decimal] = None
     notes: Optional[str] = None
     reference: Optional[str] = None
+    is_fixed_cost: Optional[bool] = None
     is_overdue: bool
     created_at: datetime
     updated_at: Optional[datetime] = None

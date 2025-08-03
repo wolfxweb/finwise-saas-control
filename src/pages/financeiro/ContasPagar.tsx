@@ -67,6 +67,7 @@ interface AccountsPayable {
   installment_amount?: number;
   notes?: string;
   reference?: string;
+  is_fixed_cost?: boolean;
   is_overdue: boolean;
   created_at: string;
 }
@@ -187,6 +188,7 @@ export default function ContasPagar() {
     due_date: new Date().toISOString().split('T')[0],
     notes: "",
     reference: "",
+    is_fixed_cost: false,
     // Status e pagamento
     status: "pending" as "pending" | "paid" | "overdue" | "cancelled",
     paid_amount: 0,
@@ -293,6 +295,7 @@ export default function ContasPagar() {
       due_date: new Date().toISOString().split('T')[0],
       notes: "",
       reference: "",
+      is_fixed_cost: false,
       status: "pending",
       paid_amount: 0,
       payment_date: new Date().toISOString().split('T')[0],
@@ -320,6 +323,7 @@ export default function ContasPagar() {
         due_date: fullPayable.due_date,
         notes: fullPayable.notes || "",
         reference: fullPayable.reference || "",
+        is_fixed_cost: fullPayable.is_fixed_cost || false,
         status: fullPayable.status,
         paid_amount: fullPayable.paid_amount || 0,
         payment_date: fullPayable.payment_date || new Date().toISOString().split('T')[0],
@@ -357,6 +361,7 @@ export default function ContasPagar() {
         due_date: fullPayable.due_date,
         notes: fullPayable.notes || "",
         reference: fullPayable.reference || "",
+        is_fixed_cost: fullPayable.is_fixed_cost || false,
         status: fullPayable.status,
         paid_amount: fullPayable.paid_amount || 0,
         payment_date: fullPayable.payment_date || new Date().toISOString().split('T')[0],
@@ -393,7 +398,8 @@ export default function ContasPagar() {
           first_due_date: formData.first_due_date,
           installment_interval_days: formData.installment_interval_days,
           notes: formData.notes,
-          reference: formData.reference
+          reference: formData.reference,
+          is_fixed_cost: formData.is_fixed_cost
         };
         
         await api.post("/api/v1/accounts-payable/installments", installmentData);
@@ -1074,6 +1080,17 @@ export default function ContasPagar() {
     return supplier ? supplier.name : "Fornecedor não encontrado";
   };
 
+  // Função para calcular o valor total do parcelamento
+  const getInstallmentTotalAmount = (payable: AccountsPayable) => {
+    if (payable.payable_type === 'installment' && payable.total_installments > 1) {
+      // Para parcelas, o total é o valor da parcela multiplicado pelo número total de parcelas
+      const installmentAmount = parseFloat(payable.total_amount.toString());
+      const totalInstallments = parseInt(payable.total_installments.toString());
+      return installmentAmount * totalInstallments;
+    }
+    return parseFloat(payable.total_amount.toString());
+  };
+
   return (
     <div className="container mx-auto py-6 space-y-6">
       {/* Header */}
@@ -1289,10 +1306,18 @@ export default function ContasPagar() {
                           <TableCell>{payable.category_id ? categories.find(c => c.id === payable.category_id)?.name || '-' : '-'}</TableCell>
                           <TableCell>
                             <div>
-                              <div className="font-medium">R$ {payable.total_amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div>
-                              {payable.payable_type === 'installment' && (
-                                <div className="text-sm text-muted-foreground">
-                                  {payable.installment_number}/{payable.total_installments}
+                              {payable.payable_type === 'installment' && payable.total_installments > 1 ? (
+                                <>
+                                  <div className="font-medium">
+                                    R$ {parseFloat(payable.total_amount.toString()).toLocaleString('pt-BR', { minimumFractionDigits: 2 })} {payable.installment_number}/{payable.total_installments}
+                                  </div>
+                                  <div className="text-sm text-muted-foreground">
+                                    Total: R$ {getInstallmentTotalAmount(payable).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                                  </div>
+                                </>
+                              ) : (
+                                <div className="font-medium">
+                                  R$ {parseFloat(payable.total_amount.toString()).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                                 </div>
                               )}
                             </div>
@@ -1884,6 +1909,17 @@ export default function ContasPagar() {
                     disabled={isViewMode}
                     placeholder="Referência externa"
                   />
+                </div>
+                <div className="flex items-center space-x-2">
+                  <Switch
+                    id="is_fixed_cost"
+                    checked={formData.is_fixed_cost}
+                    onCheckedChange={(checked) => setFormData(prev => ({ ...prev, is_fixed_cost: checked }))}
+                    disabled={isViewMode}
+                  />
+                  <Label htmlFor="is_fixed_cost" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                    Custo Fixo
+                  </Label>
                 </div>
               </div>
               <div>
