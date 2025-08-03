@@ -67,12 +67,14 @@ export default function NotaFiscal() {
   const [importFinancialType, setImportFinancialType] = useState<string>('receita');
   const [importCategoryId, setImportCategoryId] = useState<number | null>(null);
   const [importCustomerId, setImportCustomerId] = useState<number | null>(null);
+  const [importAccountId, setImportAccountId] = useState<number | null>(null);
   const [importStatus, setImportStatus] = useState<string>('pending');
   const [importDueDate, setImportDueDate] = useState<Date | undefined>(undefined);
   const [shouldCreateFinancialEntry, setShouldCreateFinancialEntry] = useState<boolean>(true);
   const [handleDuplicates, setHandleDuplicates] = useState<'skip' | 'overwrite'>('skip');
   const [categories, setCategories] = useState<any[]>([]);
   const [customers, setCustomers] = useState<any[]>([]);
+  const [accounts, setAccounts] = useState<any[]>([]);
   const [selectedFiles, setSelectedFiles] = useState<FileList | null>(null);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -185,6 +187,7 @@ export default function NotaFiscal() {
     loadNotasFiscais();
     loadCategories();
     loadCustomers();
+    loadAccounts();
   }, []);
 
   // Processar dados dos relatórios quando notas fiscais mudarem
@@ -234,6 +237,15 @@ export default function NotaFiscal() {
       setCustomers(response.data || []);
     } catch (error) {
       console.error("Erro ao carregar clientes:", error);
+    }
+  };
+
+  const loadAccounts = async () => {
+    try {
+      const response = await api.get("/api/v1/accounts/");
+      setAccounts(response.data || []);
+    } catch (error) {
+      console.error("Erro ao carregar contas:", error);
     }
   };
 
@@ -961,6 +973,7 @@ export default function NotaFiscal() {
           description: `NF ${notaFiscal.numero || notaFiscal.numero_nota} - ${notaFiscal.destinatario_nome || 'Cliente'}`,
           customer_id: customerId,
           category_id: importCategoryId,
+          account_id: importAccountId,
           receivable_type: 'cash',
           total_amount: valorTotal,
           entry_date: entryDate, // Data de emissão da nota como data de entrada (apenas data, sem hora)
@@ -3886,7 +3899,7 @@ export default function NotaFiscal() {
 
       {/* Modal de Importação */}
       <Dialog open={isImportDialogOpen} onOpenChange={setIsImportDialogOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-4xl">
           <DialogHeader>
             <DialogTitle>Importar Notas Fiscais</DialogTitle>
             <DialogDescription>
@@ -3894,8 +3907,8 @@ export default function NotaFiscal() {
             </DialogDescription>
           </DialogHeader>
           
-          <div className="space-y-4">
-            {/* Seleção de Arquivos */}
+          <div className="space-y-6">
+            {/* Seleção de Arquivos - Largura Total */}
             <div className="space-y-2">
               <Label htmlFor="file-upload">Arquivos</Label>
               <div className="flex items-center gap-2">
@@ -3923,169 +3936,208 @@ export default function NotaFiscal() {
               )}
             </div>
 
-            {/* Tipo de Nota Fiscal */}
-            <div className="space-y-2">
-              <Label htmlFor="import-type">Tipo de Nota Fiscal</Label>
-              <Select value={importType} onValueChange={setImportType}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione o tipo" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="entrada">Entrada (Compra)</SelectItem>
-                  <SelectItem value="saida">Saída (Venda)</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Origem da Importação */}
-            <div className="space-y-2">
-              <Label htmlFor="import-origin">Origem</Label>
-              <Select value={importOrigin} onValueChange={setImportOrigin}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione a origem" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="manual">Importação Manual</SelectItem>
-                  <SelectItem value="sefaz">SEFAZ</SelectItem>
-                  <SelectItem value="erp">Sistema ERP</SelectItem>
-                  <SelectItem value="email">Email</SelectItem>
-                  <SelectItem value="api">API Externa</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Opção para lidar com duplicatas */}
-            <div className="space-y-2">
-              <Label htmlFor="handle-duplicates">Notas Fiscais Duplicadas</Label>
-              <Select value={handleDuplicates} onValueChange={(value: 'skip' | 'overwrite') => setHandleDuplicates(value)}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione como lidar com duplicatas" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="skip">Pular (manter existente)</SelectItem>
-                  <SelectItem value="overwrite">Sobrescrever (substituir existente)</SelectItem>
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">
-                {handleDuplicates === 'skip' 
-                  ? 'Notas fiscais que já existem serão ignoradas'
-                  : 'Notas fiscais existentes serão substituídas pelos novos dados'
-                }
-              </p>
-            </div>
-
-            {/* Opção para criar lançamento financeiro */}
-            <div className="space-y-2">
-              <div className="flex items-center space-x-2">
-                <Checkbox
-                  id="create-financial-entry"
-                  checked={shouldCreateFinancialEntry}
-                  onCheckedChange={(checked) => setShouldCreateFinancialEntry(checked as boolean)}
-                />
-                <Label htmlFor="create-financial-entry" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
-                  Criar lançamento financeiro automaticamente
-                </Label>
+            {/* Primeira linha - 2 colunas */}
+            <div className="grid grid-cols-2 gap-4">
+              {/* Tipo de Nota Fiscal */}
+              <div className="space-y-2">
+                <Label htmlFor="import-type">Tipo de Nota Fiscal</Label>
+                <Select value={importType} onValueChange={setImportType}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione o tipo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="entrada">Entrada (Compra)</SelectItem>
+                    <SelectItem value="saida">Saída (Venda)</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
-              <p className="text-xs text-muted-foreground">
-                Se marcado, criará uma conta a receber/pagar baseada na nota fiscal
-              </p>
+
+              {/* Origem da Importação */}
+              <div className="space-y-2">
+                <Label htmlFor="import-origin">Origem</Label>
+                <Select value={importOrigin} onValueChange={setImportOrigin}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione a origem" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="manual">Importação Manual</SelectItem>
+                    <SelectItem value="sefaz">SEFAZ</SelectItem>
+                    <SelectItem value="erp">Sistema ERP</SelectItem>
+                    <SelectItem value="email">Email</SelectItem>
+                    <SelectItem value="api">API Externa</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
 
-            {/* Tipo de Lançamento Financeiro */}
-            <div className="space-y-2">
-              <Label htmlFor="import-financial-type">Tipo de Lançamento</Label>
-              <Select value={importFinancialType} onValueChange={setImportFinancialType}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione o tipo" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="receita">Receita</SelectItem>
-                  <SelectItem value="despesa">Despesa</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+            {/* Segunda linha - 2 colunas */}
+            <div className="grid grid-cols-2 gap-4">
+              {/* Opção para lidar com duplicatas */}
+              <div className="space-y-2">
+                <Label htmlFor="handle-duplicates">Notas Fiscais Duplicadas</Label>
+                <Select value={handleDuplicates} onValueChange={(value: 'skip' | 'overwrite') => setHandleDuplicates(value)}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione como lidar com duplicatas" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="skip">Pular (manter existente)</SelectItem>
+                    <SelectItem value="overwrite">Sobrescrever (substituir existente)</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  {handleDuplicates === 'skip' 
+                    ? 'Notas fiscais que já existem serão ignoradas'
+                    : 'Notas fiscais existentes serão substituídas pelos novos dados'
+                  }
+                </p>
+              </div>
 
-            {/* Cliente */}
-            <div className="space-y-2">
-              <Label htmlFor="import-customer">Cliente</Label>
-              <Select value={importCustomerId?.toString() || ''} onValueChange={(value) => setImportCustomerId(value ? parseInt(value) : null)}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione um cliente (opcional)" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="">Usar cliente da nota fiscal</SelectItem>
-                  {customers.map((customer) => (
-                    <SelectItem key={customer.id} value={customer.id.toString()}>
-                      {customer.name} {customer.cpf ? `(${customer.cpf})` : customer.cnpj ? `(${customer.cnpj})` : ''}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Categoria */}
-            <div className="space-y-2">
-              <Label htmlFor="import-category">Categoria</Label>
-              <Select value={importCategoryId?.toString() || ''} onValueChange={(value) => setImportCategoryId(value ? parseInt(value) : null)}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione uma categoria (opcional)" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="">Sem categoria</SelectItem>
-                  {categories.map((category) => (
-                    <SelectItem key={category.id} value={category.id.toString()}>
-                      {category.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Status do Lançamento */}
-            <div className="space-y-2">
-              <Label htmlFor="import-status">Status do Lançamento</Label>
-              <Select value={importStatus} onValueChange={setImportStatus}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione o status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="pending">Pendente</SelectItem>
-                  <SelectItem value="paid">Pago</SelectItem>
-                  <SelectItem value="overdue">Vencido</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Data de Vencimento */}
-            <div className="space-y-2">
-              <Label htmlFor="import-due-date">Data de Vencimento</Label>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant="outline"
-                    className="w-full justify-start text-left font-normal"
-                  >
-                    <CalendarIcon className="mr-2 h-4 w-4" />
-                    {importDueDate ? (
-                      format(importDueDate, "PPP", { locale: ptBR })
-                    ) : (
-                      <span className="text-muted-foreground">Selecione uma data</span>
-                    )}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
-                  <Calendar
-                    mode="single"
-                    selected={importDueDate}
-                    onSelect={setImportDueDate}
-                    initialFocus
-                    locale={ptBR}
+              {/* Opção para criar lançamento financeiro */}
+              <div className="space-y-2">
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="create-financial-entry"
+                    checked={shouldCreateFinancialEntry}
+                    onCheckedChange={(checked) => setShouldCreateFinancialEntry(checked as boolean)}
                   />
-                </PopoverContent>
-              </Popover>
-              <p className="text-xs text-muted-foreground">
-                Data de vencimento da conta a receber. Se não informada, será usada a data atual.
-              </p>
+                  <Label htmlFor="create-financial-entry" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                    Criar lançamento financeiro automaticamente
+                  </Label>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Se marcado, criará uma conta a receber/pagar baseada na nota fiscal
+                </p>
+              </div>
+            </div>
+
+            {/* Terceira linha - 2 colunas */}
+            <div className="grid grid-cols-2 gap-4">
+              {/* Tipo de Lançamento Financeiro */}
+              <div className="space-y-2">
+                <Label htmlFor="import-financial-type">Tipo de Lançamento</Label>
+                <Select value={importFinancialType} onValueChange={setImportFinancialType}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione o tipo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="receita">Receita</SelectItem>
+                    <SelectItem value="despesa">Despesa</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Cliente */}
+              <div className="space-y-2">
+                <Label htmlFor="import-customer">Cliente</Label>
+                <Select value={importCustomerId?.toString() || ''} onValueChange={(value) => setImportCustomerId(value ? parseInt(value) : null)}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione um cliente (opcional)" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">Usar cliente da nota fiscal</SelectItem>
+                    {customers.map((customer) => (
+                      <SelectItem key={customer.id} value={customer.id.toString()}>
+                        {customer.name} {customer.cpf ? `(${customer.cpf})` : customer.cnpj ? `(${customer.cnpj})` : ''}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            {/* Quarta linha - 2 colunas */}
+            <div className="grid grid-cols-2 gap-4">
+              {/* Categoria */}
+              <div className="space-y-2">
+                <Label htmlFor="import-category">Categoria</Label>
+                <Select value={importCategoryId?.toString() || ''} onValueChange={(value) => setImportCategoryId(value ? parseInt(value) : null)}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione uma categoria (opcional)" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">Sem categoria</SelectItem>
+                    {categories.map((category) => (
+                      <SelectItem key={category.id} value={category.id.toString()}>
+                        {category.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Conta Bancária */}
+              <div className="space-y-2">
+                <Label htmlFor="import-account">Conta Bancária</Label>
+                <Select value={importAccountId?.toString() || ''} onValueChange={(value) => setImportAccountId(value ? parseInt(value) : null)}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione uma conta (opcional)" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">Sem conta vinculada</SelectItem>
+                    {accounts
+                      .filter(account => 
+                        account.account_type === 'checking' || 
+                        account.account_type === 'savings' || 
+                        account.account_type === 'investment'
+                      )
+                      .map((account) => (
+                        <SelectItem key={account.id} value={account.id.toString()}>
+                          {account.bank_name} - {account.account_number} ({account.holder_name})
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            {/* Quinta linha - 2 colunas */}
+            <div className="grid grid-cols-2 gap-4">
+              {/* Status do Lançamento */}
+              <div className="space-y-2">
+                <Label htmlFor="import-status">Status do Lançamento</Label>
+                <Select value={importStatus} onValueChange={setImportStatus}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione o status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="pending">Pendente</SelectItem>
+                    <SelectItem value="paid">Pago</SelectItem>
+                    <SelectItem value="overdue">Vencido</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Data de Vencimento */}
+              <div className="space-y-2">
+                <Label htmlFor="import-due-date">Data de Vencimento</Label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className="w-full justify-start text-left font-normal"
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {importDueDate ? (
+                        format(importDueDate, "PPP", { locale: ptBR })
+                      ) : (
+                        <span className="text-muted-foreground">Selecione uma data</span>
+                      )}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={importDueDate}
+                      onSelect={setImportDueDate}
+                      initialFocus
+                      locale={ptBR}
+                    />
+                  </PopoverContent>
+                </Popover>
+                <p className="text-xs text-muted-foreground">
+                  Data de vencimento da conta a receber. Se não informada, será usada a data atual.
+                </p>
+              </div>
             </div>
 
             {/* Botões de Ação */}

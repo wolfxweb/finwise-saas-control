@@ -35,6 +35,22 @@ interface Customer {
   email: string;
 }
 
+interface Account {
+  id: string;
+  bank_id: string;
+  bank_name: string;
+  account_type: 'checking' | 'savings' | 'investment' | 'credit' | 'debit';
+  account_number: string;
+  agency: string;
+  holder_name: string;
+  balance: number;
+  limit: number;
+  available_balance: number;
+  is_active: boolean;
+  notes?: string;
+  created_at: string;
+}
+
 interface Category {
   id: number;
   name: string;
@@ -55,6 +71,8 @@ interface AccountsReceivable {
   customer_name: string;
   category_id?: number;
   category_name?: string;
+  account_id?: number;
+  account_name?: string;
   receivable_type: "cash" | "installment";
   status: "pending" | "paid" | "overdue" | "cancelled";
   total_amount: number;
@@ -97,6 +115,7 @@ export default function ContasReceber() {
   const [summary, setSummary] = useState<AccountsReceivableSummary | null>(null);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [accounts, setAccounts] = useState<Account[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [filterStatus, setFilterStatus] = useState<string>("all");
@@ -181,6 +200,7 @@ export default function ContasReceber() {
     description: "",
     customer_id: 0,
     category_id: 0,
+    account_id: 0,
     receivable_type: "cash" as "cash" | "installment",
     total_amount: 0,
     entry_date: new Date().toISOString().split('T')[0],
@@ -233,7 +253,8 @@ export default function ContasReceber() {
         loadReceivables(),
         loadSummary(),
         loadCustomers(),
-        loadCategories()
+        loadCategories(),
+        loadAccounts()
       ]);
     } catch (error) {
       console.error("Erro ao carregar dados:", error);
@@ -284,6 +305,15 @@ export default function ContasReceber() {
     }
   };
 
+  const loadAccounts = async () => {
+    try {
+      const response = await api.get("/api/v1/accounts/");
+      setAccounts(response.data || []);
+    } catch (error) {
+      console.error("Erro ao carregar contas:", error);
+    }
+  };
+
   const handleCreateReceivable = () => {
     setEditingReceivable(null);
     setIsViewMode(false);
@@ -293,6 +323,7 @@ export default function ContasReceber() {
       description: "",
       customer_id: 0,
       category_id: 0,
+      account_id: 0,
       receivable_type: "cash",
       total_amount: 0,
       entry_date: new Date().toISOString().split('T')[0],
@@ -320,6 +351,7 @@ export default function ContasReceber() {
         description: fullReceivable.description,
         customer_id: fullReceivable.customer_id,
         category_id: fullReceivable.category_id || 0,
+        account_id: fullReceivable.account_id || 0,
         receivable_type: fullReceivable.receivable_type,
         total_amount: fullReceivable.total_amount,
         entry_date: fullReceivable.entry_date,
@@ -352,11 +384,16 @@ export default function ContasReceber() {
       const response = await api.get(`/api/v1/accounts-receivable/${receivable.id}`);
       const fullReceivable = response.data;
       
+      console.log('Dados recebidos do backend:', fullReceivable);
+      console.log('Account ID:', fullReceivable.account_id);
+      console.log('Account Name:', fullReceivable.account_name);
+      
       setEditingReceivable(fullReceivable);
       setFormData({
         description: fullReceivable.description,
         customer_id: fullReceivable.customer_id,
         category_id: fullReceivable.category_id || 0,
+        account_id: fullReceivable.account_id || 0,
         receivable_type: fullReceivable.receivable_type,
         total_amount: fullReceivable.total_amount,
         entry_date: fullReceivable.entry_date,
@@ -392,6 +429,7 @@ export default function ContasReceber() {
           description: formData.description,
           customer_id: formData.customer_id,
           category_id: formData.category_id === 0 ? null : formData.category_id,
+          account_id: formData.account_id === 0 ? null : formData.account_id,
           total_amount: formData.total_amount,
           total_installments: formData.total_installments,
           installment_amount: formData.installment_amount || null,
@@ -410,10 +448,13 @@ export default function ContasReceber() {
       } else {
         // Criar conta única
         if (editingReceivable) {
-          // Preparar dados para envio, convertendo category_id 0 para null
+          // Preparar dados para envio, convertendo category_id 0 para null e account_id vazio para null
           const updateData = { ...formData };
           if (updateData.category_id === 0) {
             updateData.category_id = null;
+          }
+          if (updateData.account_id === 0) {
+            updateData.account_id = null;
           }
           
           await api.put(`/api/v1/accounts-receivable/${editingReceivable.id}`, updateData);
@@ -422,10 +463,13 @@ export default function ContasReceber() {
             description: "Conta a receber atualizada com sucesso"
           });
         } else {
-          // Preparar dados para envio, convertendo category_id 0 para null
+          // Preparar dados para envio, convertendo category_id 0 para null e account_id vazio para null
           const createData = { ...formData };
           if (createData.category_id === 0) {
             createData.category_id = null;
+          }
+          if (createData.account_id === 0) {
+            createData.account_id = null;
           }
           
           await api.post("/api/v1/accounts-receivable/", createData);
@@ -1225,6 +1269,7 @@ export default function ContasReceber() {
                           {getSortIcon('customer_name')}
                         </div>
                       </TableHead>
+                      <TableHead>Conta Bancária</TableHead>
                       <TableHead 
                         className="cursor-pointer hover:bg-gray-50"
                         onClick={() => handleSort('total_amount')}
@@ -1284,6 +1329,15 @@ export default function ContasReceber() {
                           </div>
                         </TableCell>
                         <TableCell>{receivable.customer_name}</TableCell>
+                        <TableCell>
+                          <div>
+                            {receivable.account_name ? (
+                              <div className="font-medium">{receivable.account_name}</div>
+                            ) : (
+                              <div className="text-sm text-muted-foreground">Não vinculada</div>
+                            )}
+                          </div>
+                        </TableCell>
                         <TableCell>
                           <div>
                             <div className="font-medium">
@@ -2112,6 +2166,35 @@ export default function ContasReceber() {
                   </Select>
                 </div>
                 <div>
+                  <Label htmlFor="account_id">Conta Bancária</Label>
+                  <Select
+                    value={formData.account_id.toString()}
+                    onValueChange={(value) => setFormData({...formData, account_id: parseInt(value) || 0})}
+                    disabled={isViewMode}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione uma conta" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="0">Sem conta</SelectItem>
+                      {accounts
+                        .filter(account => 
+                          account.account_type === 'checking' || 
+                          account.account_type === 'savings' || 
+                          account.account_type === 'investment'
+                        )
+                        .map((account) => (
+                          <SelectItem key={account.id} value={account.id.toString()}>
+                            {account.bank_name} - {account.account_number} ({account.holder_name})
+                          </SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
                   <Label htmlFor="receivable_type">Tipo</Label>
                   <Select
                     value={formData.receivable_type}
@@ -2136,9 +2219,6 @@ export default function ContasReceber() {
                     </SelectContent>
                   </Select>
                 </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label htmlFor="total_amount">Valor Total (R$) *</Label>
                   <Input
@@ -2152,17 +2232,9 @@ export default function ContasReceber() {
                     disabled={isViewMode}
                   />
                 </div>
-                <div>
-                  <Label htmlFor="reference">Referência</Label>
-                  <Input
-                    id="reference"
-                    value={formData.reference}
-                    onChange={(e) => setFormData({...formData, reference: e.target.value})}
-                    placeholder="Referência externa"
-                    disabled={isViewMode}
-                  />
-                </div>
               </div>
+
+
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
@@ -2234,16 +2306,28 @@ export default function ContasReceber() {
                 </div>
               )}
 
-              <div>
-                <Label htmlFor="notes">Observações</Label>
-                <Textarea
-                  id="notes"
-                  value={formData.notes}
-                  onChange={(e) => setFormData({...formData, notes: e.target.value})}
-                  placeholder="Observações sobre a conta a receber"
-                  rows={3}
-                  disabled={isViewMode}
-                />
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="reference">Referência</Label>
+                  <Input
+                    id="reference"
+                    value={formData.reference}
+                    onChange={(e) => setFormData({...formData, reference: e.target.value})}
+                    placeholder="Referência externa"
+                    disabled={isViewMode}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="notes">Observações</Label>
+                  <Textarea
+                    id="notes"
+                    value={formData.notes}
+                    onChange={(e) => setFormData({...formData, notes: e.target.value})}
+                    placeholder="Observações adicionais"
+                    disabled={isViewMode}
+                    rows={3}
+                  />
+                </div>
               </div>
             </TabsContent>
 

@@ -23,6 +23,7 @@ class AccountsReceivable(Base):
     company_id = Column(UUID(as_uuid=True), ForeignKey("companies.id"), nullable=False)
     customer_id = Column(Integer, ForeignKey("customers.id"), nullable=False)
     category_id = Column(Integer, ForeignKey("categories.id"), nullable=True)
+    account_id = Column(Integer, ForeignKey("accounts.id"), nullable=True)
     
     # Informações básicas
     description = Column(String(255), nullable=False)
@@ -55,6 +56,7 @@ class AccountsReceivable(Base):
     company = relationship("Company")
     customer = relationship("Customer")
     category = relationship("Category")
+    account = relationship("Account")
     
     def __repr__(self):
         return f"<AccountsReceivable(id={self.id}, description='{self.description}', amount={self.total_amount})>"
@@ -105,4 +107,11 @@ class AccountsReceivable(Base):
     @property
     def category_name(self):
         """Nome da categoria"""
-        return self.category.name if self.category else "" 
+        return self.category.name if self.category else ""
+    
+    @property
+    def account_name(self):
+        """Nome da conta bancária"""
+        if self.account:
+            return f"{self.account.bank.name} - {self.account.account_number} ({self.account.holder_name})"
+        return "" 

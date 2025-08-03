@@ -18,6 +18,7 @@ class AccountsReceivableBase(BaseModel):
     description: str = Field(..., min_length=1, max_length=255)
     customer_id: int
     category_id: Optional[int] = None
+    account_id: Optional[int] = None
     receivable_type: ReceivableType = ReceivableType.CASH
     total_amount: float = Field(..., gt=0)
     entry_date: date
@@ -39,6 +40,7 @@ class AccountsReceivableUpdate(BaseModel):
     description: Optional[str] = None
     customer_id: Optional[int] = None
     category_id: Optional[int] = None
+    account_id: Optional[int] = None
     receivable_type: Optional[ReceivableType] = None
     total_amount: Optional[float] = None
     entry_date: Optional[date] = None
@@ -73,6 +75,7 @@ class AccountsReceivableResponse(AccountsReceivableBase):
     # Relacionamentos
     customer_name: str
     category_name: Optional[str] = None
+    account_name: Optional[str] = None
     
     class Config:
         from_attributes = True

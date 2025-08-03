@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import and_, or_, func, desc
 from typing import List, Optional
 from datetime import datetime, date, timedelta
@@ -10,6 +10,7 @@ from ..v1.auth import get_current_user
 from app.models.accounts_receivable import AccountsReceivable, ReceivableStatus, ReceivableType
 from app.models.customer import Customer
 from app.models.category import Category
+from app.models.account import Account
 from app.models.user import User
 from app.schemas.accounts_receivable import (
     AccountsReceivableCreate, AccountsReceivableUpdate, AccountsReceivableResponse, 
@@ -74,6 +75,7 @@ def create_accounts_receivable(
             company_id=current_user.company_id,
             customer_id=receivable.customer_id,
             category_id=receivable.category_id,
+            account_id=receivable.account_id,
             description=receivable.description,
             receivable_type=receivable.receivable_type,
             total_amount=total_amount,
@@ -264,7 +266,11 @@ def get_accounts_receivable_detail(
     current_user: User = Depends(get_current_user)
 ):
     """Obter detalhes de uma conta a receber"""
-    receivable = db.query(AccountsReceivable).filter(
+    receivable = db.query(AccountsReceivable).options(
+        joinedload(AccountsReceivable.customer),
+        joinedload(AccountsReceivable.category),
+        joinedload(AccountsReceivable.account).joinedload(Account.bank)
+    ).filter(
         and_(
             AccountsReceivable.id == receivable_id,
             AccountsReceivable.company_id == current_user.company_id
