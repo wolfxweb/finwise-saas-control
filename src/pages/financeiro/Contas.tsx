@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectGroup, SelectLabel, SelectSeparator } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
@@ -23,7 +23,8 @@ import {
   TrendingUp,
   AlertCircle,
   CheckCircle,
-  XCircle
+  XCircle,
+  BarChart3
 } from 'lucide-react';
 import { api } from '@/services/api';
 
@@ -42,7 +43,7 @@ interface Account {
   id: string;
   bank_id: string;
   bank_name: string;
-  account_type: 'checking' | 'savings' | 'investment' | 'credit';
+  account_type: 'checking' | 'savings' | 'investment' | 'credit' | 'debit';
   account_number: string;
   agency: string;
   holder_name: string;
@@ -55,6 +56,23 @@ interface Account {
 }
 
 interface AccountSummary {
+  // Contas Bancárias
+  bank_accounts: number;
+  bank_balance: number;
+  bank_limit: number;
+  bank_available: number;
+  bank_active: number;
+  bank_inactive: number;
+  
+  // Cartões
+  card_accounts: number;
+  card_balance: number;
+  card_limit: number;
+  card_available: number;
+  card_active: number;
+  card_inactive: number;
+  
+  // Totais
   total_accounts: number;
   total_balance: number;
   total_limit: number;
@@ -77,9 +95,11 @@ export default function Contas() {
   // Estados para modais
   const [isBankModalOpen, setIsBankModalOpen] = useState(false);
   const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
+  const [isCardModalOpen, setIsCardModalOpen] = useState(false);
   const [isViewMode, setIsViewMode] = useState(false);
   const [editingBank, setEditingBank] = useState<Bank | null>(null);
   const [editingAccount, setEditingAccount] = useState<Account | null>(null);
+  const [editingCard, setEditingCard] = useState<Account | null>(null);
   const [activeTab, setActiveTab] = useState("banks");
   
   // Estados para formulários
@@ -93,7 +113,7 @@ export default function Contas() {
   
   const [accountFormData, setAccountFormData] = useState({
     bank_id: "",
-    account_type: "checking" as "checking" | "savings" | "investment" | "credit",
+    account_type: "checking" as "checking" | "savings" | "investment" | "credit" | "debit",
     account_number: "",
     agency: "",
     holder_name: "",
@@ -113,13 +133,17 @@ export default function Contas() {
     loadData();
   }, []);
 
+  // Recalcular resumo sempre que as contas mudarem
+  useEffect(() => {
+    loadSummary();
+  }, [accounts]);
+
   const loadData = async () => {
     try {
       setIsLoading(true);
       await Promise.all([
         loadBanks(),
-        loadAccounts(),
-        loadSummary()
+        loadAccounts()
       ]);
     } catch (error) {
       console.error("Erro ao carregar dados:", error);
@@ -156,12 +180,45 @@ export default function Contas() {
     }
   };
 
-  const loadSummary = async () => {
+  const loadSummary = () => {
     try {
-      const response = await api.get("/api/v1/accounts/reports/summary");
-      setSummary(response.data);
+      // Calcular resumo baseado nas contas carregadas
+      const bankAccounts = accounts.filter(acc => 
+        acc.account_type === 'checking' || acc.account_type === 'savings' || acc.account_type === 'investment'
+      );
+      const cardAccounts = accounts.filter(acc => 
+        acc.account_type === 'credit' || acc.account_type === 'debit'
+      );
+
+      const summaryData: AccountSummary = {
+        // Contas Bancárias
+        bank_accounts: bankAccounts.length,
+        bank_balance: bankAccounts.reduce((sum, acc) => sum + acc.balance, 0),
+        bank_limit: bankAccounts.reduce((sum, acc) => sum + acc.limit, 0),
+        bank_available: bankAccounts.reduce((sum, acc) => sum + acc.available_balance, 0),
+        bank_active: bankAccounts.filter(acc => acc.is_active).length,
+        bank_inactive: bankAccounts.filter(acc => !acc.is_active).length,
+        
+        // Cartões
+        card_accounts: cardAccounts.length,
+        card_balance: cardAccounts.reduce((sum, acc) => sum + acc.balance, 0),
+        card_limit: cardAccounts.reduce((sum, acc) => sum + acc.limit, 0),
+        card_available: cardAccounts.reduce((sum, acc) => sum + acc.available_balance, 0),
+        card_active: cardAccounts.filter(acc => acc.is_active).length,
+        card_inactive: cardAccounts.filter(acc => !acc.is_active).length,
+        
+        // Totais
+        total_accounts: accounts.length,
+        total_balance: accounts.reduce((sum, acc) => sum + acc.balance, 0),
+        total_limit: accounts.reduce((sum, acc) => sum + acc.limit, 0),
+        total_available: accounts.reduce((sum, acc) => sum + acc.available_balance, 0),
+        active_accounts: accounts.filter(acc => acc.is_active).length,
+        inactive_accounts: accounts.filter(acc => !acc.is_active).length
+      };
+
+      setSummary(summaryData);
     } catch (error) {
-      console.error("Erro ao carregar resumo:", error);
+      console.error("Erro ao calcular resumo:", error);
     }
   };
 
@@ -277,11 +334,105 @@ export default function Contas() {
     setIsAccountModalOpen(true);
   };
 
+  const handleAccountTypeChange = (newType: string) => {
+    setAccountFormData(prev => ({
+      ...prev,
+      account_type: newType as 'checking' | 'savings' | 'investment' | 'credit' | 'debit',
+      // Limpar campos específicos quando mudar o tipo
+      account_number: "",
+      agency: (newType === 'credit' || newType === 'debit') ? 'N/A' : "",
+      holder_name: ""
+    }));
+  };
+
+  // Funções para Cartões
+  const handleCreateCard = () => {
+    setEditingCard(null);
+    setIsViewMode(false);
+    setAccountFormData({
+      bank_id: "",
+      account_type: "credit",
+      account_number: "",
+      agency: "N/A",
+      holder_name: "",
+      balance: 0,
+      limit: 0,
+      is_active: true,
+      notes: ""
+    });
+    setIsCardModalOpen(true);
+  };
+
+  const handleEditCard = (card: Account) => {
+    setEditingCard(card);
+    setIsViewMode(false);
+    
+    // Garantir que bank_id seja string para compatibilidade com o Select
+    const bankId = String(card.bank_id);
+    
+    console.log('Editando cartão:', {
+      card_id: card.id,
+      bank_id: card.bank_id,
+      bank_id_string: bankId,
+      bank_name: card.bank_name
+    });
+    
+    setAccountFormData({
+      bank_id: bankId,
+      account_type: card.account_type,
+      account_number: card.account_number,
+      agency: card.agency,
+      holder_name: card.holder_name,
+      balance: card.balance,
+      limit: card.limit,
+      is_active: card.is_active,
+      notes: card.notes || ""
+    });
+    setIsCardModalOpen(true);
+  };
+
+  const handleViewCard = (card: Account) => {
+    setEditingCard(card);
+    setIsViewMode(true);
+    
+    // Garantir que bank_id seja string para compatibilidade com o Select
+    const bankId = String(card.bank_id);
+    
+    setAccountFormData({
+      bank_id: bankId,
+      account_type: card.account_type,
+      account_number: card.account_number,
+      agency: card.agency,
+      holder_name: card.holder_name,
+      balance: card.balance,
+      limit: card.limit,
+      is_active: card.is_active,
+      notes: card.notes || ""
+    });
+    setIsCardModalOpen(true);
+  };
+
+  const handleDeleteCard = (card: Account) => {
+    setItemToDelete(card);
+    setIsDeleteAccountModalOpen(true);
+  };
+
+  const getFilteredCards = () => {
+    return accounts.filter(account => 
+      (account.account_type === 'credit' || account.account_type === 'debit') &&
+      applyFilters([account]).length > 0
+    );
+  };
+
   const handleEditAccount = (account: Account) => {
     setEditingAccount(account);
     setIsViewMode(false);
+    
+    // Garantir que bank_id seja string para compatibilidade com o Select
+    const bankId = String(account.bank_id);
+    
     setAccountFormData({
-      bank_id: account.bank_id,
+      bank_id: bankId,
       account_type: account.account_type,
       account_number: account.account_number,
       agency: account.agency,
@@ -297,8 +448,12 @@ export default function Contas() {
   const handleViewAccount = (account: Account) => {
     setEditingAccount(account);
     setIsViewMode(true);
+    
+    // Garantir que bank_id seja string para compatibilidade com o Select
+    const bankId = String(account.bank_id);
+    
     setAccountFormData({
-      bank_id: account.bank_id,
+      bank_id: bankId,
       account_type: account.account_type,
       account_number: account.account_number,
       agency: account.agency,
@@ -313,21 +468,40 @@ export default function Contas() {
 
   const handleSaveAccount = async () => {
     try {
+      // Preparar dados para envio
+      const dataToSend = { ...accountFormData };
+      
+
+      
+      // Se for cartão de crédito ou débito, definir agência como "N/A" se estiver vazia
+      if ((dataToSend.account_type === 'credit' || dataToSend.account_type === 'debit') && !dataToSend.agency) {
+        dataToSend.agency = 'N/A';
+      }
+      
+      // Verificar se está editando conta ou cartão
       if (editingAccount) {
-        await api.put(`/api/v1/accounts/${editingAccount.id}`, accountFormData);
+        await api.put(`/api/v1/accounts/${editingAccount.id}`, dataToSend);
         toast({
           title: "Sucesso",
           description: "Conta atualizada com sucesso"
         });
-      } else {
-        await api.post("/api/v1/accounts/", accountFormData);
+        setIsAccountModalOpen(false);
+      } else if (editingCard) {
+        await api.put(`/api/v1/accounts/${editingCard.id}`, dataToSend);
         toast({
           title: "Sucesso",
-          description: "Conta criada com sucesso"
+          description: "Cartão atualizado com sucesso"
         });
+        setIsCardModalOpen(false);
+      } else {
+        await api.post("/api/v1/accounts/", dataToSend);
+        toast({
+          title: "Sucesso",
+          description: "Cartão criado com sucesso"
+        });
+        setIsCardModalOpen(false);
       }
-      setIsAccountModalOpen(false);
-      loadAccounts();
+      await loadAccounts();
       loadSummary();
     } catch (error) {
       console.error("Erro ao salvar conta:", error);
@@ -355,8 +529,7 @@ export default function Contas() {
       });
       setIsDeleteAccountModalOpen(false);
       setItemToDelete(null);
-      loadAccounts();
-      loadSummary();
+      await loadAccounts();
     } catch (error) {
       console.error("Erro ao excluir conta:", error);
       toast({
@@ -373,7 +546,8 @@ export default function Contas() {
       checking: "Conta Corrente",
       savings: "Conta Poupança",
       investment: "Conta Investimento",
-      credit: "Cartão de Crédito"
+      credit: "Cartão de Crédito",
+      debit: "Cartão de Débito"
     };
     return types[type as keyof typeof types] || type;
   };
@@ -387,6 +561,8 @@ export default function Contas() {
       case 'investment':
         return <BarChart3 className="h-4 w-4" />;
       case 'credit':
+        return <CreditCard className="h-4 w-4" />;
+      case 'debit':
         return <CreditCard className="h-4 w-4" />;
       default:
         return <Banknote className="h-4 w-4" />;
@@ -449,7 +625,15 @@ export default function Contas() {
   };
 
   const getFilteredBanks = () => applyFilters(banks);
-  const getFilteredAccounts = () => applyFilters(accounts);
+  const getFilteredAccounts = () => {
+    // Filtrar apenas contas bancárias (não cartões)
+    const bankAccounts = accounts.filter(acc => 
+      acc.account_type === 'checking' || 
+      acc.account_type === 'savings' || 
+      acc.account_type === 'investment'
+    );
+    return applyFilters(bankAccounts);
+  };
 
   const getSummaryValue = (key: keyof AccountSummary, defaultValue: number = 0) => {
     return summary ? summary[key] : defaultValue;
@@ -465,72 +649,160 @@ export default function Contas() {
         </div>
       </div>
 
-      {/* Cards de Resumo */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      {/* Cards de Resumo - Contas Bancárias */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-6">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total de Contas</CardTitle>
-            <CreditCard className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium">Contas Bancárias</CardTitle>
+            <Banknote className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{getSummaryValue('total_accounts')}</div>
+            <div className="text-2xl font-bold">{getSummaryValue('bank_accounts')}</div>
             <p className="text-xs text-muted-foreground">
-              {getSummaryValue('active_accounts')} ativas, {getSummaryValue('inactive_accounts')} inativas
+              {getSummaryValue('bank_active')} ativas, {getSummaryValue('bank_inactive')} inativas
             </p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Saldo Total</CardTitle>
+            <CardTitle className="text-sm font-medium">Saldo Bancário</CardTitle>
             <DollarSign className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              R$ {getSummaryValue('total_balance').toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+              {new Intl.NumberFormat('pt-BR', {
+                style: 'currency',
+                currency: 'BRL'
+              }).format(getSummaryValue('bank_balance'))}
             </div>
             <p className="text-xs text-muted-foreground">
-              Saldo disponível em todas as contas
+              Saldo em contas bancárias
             </p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Limite Total</CardTitle>
+            <CardTitle className="text-sm font-medium">Limite Bancário</CardTitle>
             <TrendingUp className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              R$ {getSummaryValue('total_limit').toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+              {new Intl.NumberFormat('pt-BR', {
+                style: 'currency',
+                currency: 'BRL'
+              }).format(getSummaryValue('bank_limit'))}
             </div>
             <p className="text-xs text-muted-foreground">
-              Limite de crédito disponível
+              Limite de contas bancárias
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Cards de Resumo - Cartões */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-6">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Cartões</CardTitle>
+            <CreditCard className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{getSummaryValue('card_accounts')}</div>
+            <p className="text-xs text-muted-foreground">
+              {getSummaryValue('card_active')} ativos, {getSummaryValue('card_inactive')} inativos
             </p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Disponível Total</CardTitle>
-            <CheckCircle className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium">Fatura/Saldo Cartões</CardTitle>
+            <CreditCard className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              R$ {getSummaryValue('total_available').toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+              {new Intl.NumberFormat('pt-BR', {
+                style: 'currency',
+                currency: 'BRL'
+              }).format(getSummaryValue('card_balance'))}
             </div>
             <p className="text-xs text-muted-foreground">
-              Saldo + limite disponível
+              Fatura + saldo em cartões
             </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Limite Cartões</CardTitle>
+            <TrendingUp className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">
+              {new Intl.NumberFormat('pt-BR', {
+                style: 'currency',
+                currency: 'BRL'
+              }).format(getSummaryValue('card_limit'))}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Limite total dos cartões
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Card de Total Geral */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <Card className="md:col-span-3 bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-lg font-semibold text-blue-900">Resumo Geral</CardTitle>
+            <CheckCircle className="h-5 w-5 text-blue-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <div className="text-2xl font-bold text-blue-900">
+                  {getSummaryValue('total_accounts')} contas
+                </div>
+                <p className="text-sm text-blue-700">
+                  {getSummaryValue('active_accounts')} ativas, {getSummaryValue('inactive_accounts')} inativas
+                </p>
+              </div>
+              <div>
+                <div className="text-2xl font-bold text-blue-900">
+                  {new Intl.NumberFormat('pt-BR', {
+                    style: 'currency',
+                    currency: 'BRL'
+                  }).format(getSummaryValue('total_balance'))}
+                </div>
+                <p className="text-sm text-blue-700">
+                  Saldo total disponível
+                </p>
+              </div>
+              <div>
+                <div className="text-2xl font-bold text-blue-900">
+                  {new Intl.NumberFormat('pt-BR', {
+                    style: 'currency',
+                    currency: 'BRL'
+                  }).format(getSummaryValue('total_available'))}
+                </div>
+                <p className="text-sm text-blue-700">
+                  Saldo + limite total
+                </p>
+              </div>
+            </div>
           </CardContent>
         </Card>
       </div>
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="grid w-full grid-cols-2">
+        <TabsList className="grid w-full grid-cols-3">
           <TabsTrigger value="banks">Bancos</TabsTrigger>
           <TabsTrigger value="accounts">Contas</TabsTrigger>
+          <TabsTrigger value="cards">Cartões</TabsTrigger>
         </TabsList>
 
         {/* Tab Bancos */}
@@ -728,11 +1000,17 @@ export default function Contas() {
                         <TableCell>{account.holder_name}</TableCell>
                         <TableCell>
                           <span className={account.balance >= 0 ? 'text-green-600' : 'text-red-600'}>
-                            R$ {account.balance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                            {new Intl.NumberFormat('pt-BR', {
+                              style: 'currency',
+                              currency: 'BRL'
+                            }).format(account.balance)}
                           </span>
                         </TableCell>
                         <TableCell>
-                          R$ {account.limit.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                          {new Intl.NumberFormat('pt-BR', {
+                            style: 'currency',
+                            currency: 'BRL'
+                          }).format(account.limit)}
                         </TableCell>
                         <TableCell>{getStatusBadge(account.is_active)}</TableCell>
                         <TableCell className="text-right">
@@ -755,6 +1033,155 @@ export default function Contas() {
                               variant="ghost"
                               size="sm"
                               onClick={() => handleDeleteAccount(account)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Tab Cartões */}
+        <TabsContent value="cards" className="space-y-6">
+          {/* Filtros */}
+          <div className="flex items-center space-x-4">
+            <div className="flex-1">
+              <Input
+                placeholder="Buscar por cartão, titular..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="max-w-sm"
+              />
+            </div>
+            <Select value={filterBank} onValueChange={setFilterBank}>
+              <SelectTrigger className="w-48">
+                <SelectValue placeholder="Banco" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos os Bancos</SelectItem>
+                {banks.map((bank) => (
+                  <SelectItem key={bank.id} value={bank.id}>
+                    {bank.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={filterType} onValueChange={setFilterType}>
+              <SelectTrigger className="w-48">
+                <SelectValue placeholder="Tipo" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos os Tipos</SelectItem>
+                <SelectItem value="credit">Cartão de Crédito</SelectItem>
+                <SelectItem value="debit">Cartão de Débito</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={filterStatus} onValueChange={setFilterStatus}>
+              <SelectTrigger className="w-48">
+                <SelectValue placeholder="Status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos os Status</SelectItem>
+                <SelectItem value="active">Ativos</SelectItem>
+                <SelectItem value="inactive">Inativos</SelectItem>
+              </SelectContent>
+            </Select>
+            <Button onClick={handleCreateCard}>
+              <Plus className="h-4 w-4 mr-2" />
+              Novo Cartão
+            </Button>
+          </div>
+
+          {/* Tabela de Cartões */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Cartões</CardTitle>
+              <CardDescription>
+                {getFilteredCards().length} cartão(ões) encontrado(s)
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Banco</TableHead>
+                    <TableHead>Tipo</TableHead>
+                    <TableHead>Número do Cartão</TableHead>
+                    <TableHead>Titular</TableHead>
+                    <TableHead>Limite/Fatura</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="text-right">Ações</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {getFilteredCards().length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={7} className="text-center py-8">
+                        Nenhum cartão encontrado
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    getFilteredCards().map((card) => (
+                      <TableRow key={card.id}>
+                        <TableCell className="font-medium">{card.bank_name}</TableCell>
+                        <TableCell>
+                          <div className="flex items-center space-x-2">
+                            {getAccountTypeIcon(card.account_type)}
+                            <span>{getAccountTypeLabel(card.account_type)}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          {card.account_type === 'credit' ? 
+                            `**** **** **** ${card.account_number.slice(-4)}` : 
+                            card.account_number
+                          }
+                        </TableCell>
+                        <TableCell>{card.holder_name}</TableCell>
+                        <TableCell>
+                          <div className="space-y-1">
+                            <div className="text-sm">
+                              <span className="font-medium">Limite:</span> {new Intl.NumberFormat('pt-BR', {
+                                style: 'currency',
+                                currency: 'BRL'
+                              }).format(card.limit)}
+                            </div>
+                            {card.account_type === 'credit' && (
+                              <div className="text-sm">
+                                <span className="font-medium">Fatura:</span> {new Intl.NumberFormat('pt-BR', {
+                                  style: 'currency',
+                                  currency: 'BRL'
+                                }).format(card.balance)}
+                              </div>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>{getStatusBadge(card.is_active)}</TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex items-center justify-end space-x-2">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleViewCard(card)}
+                            >
+                              <Eye className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleEditCard(card)}
+                            >
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleDeleteCard(card)}
                             >
                               <Trash2 className="h-4 w-4" />
                             </Button>
@@ -877,7 +1304,7 @@ export default function Contas() {
               <Label htmlFor="account_type">Tipo de Conta *</Label>
               <Select
                 value={accountFormData.account_type}
-                onValueChange={(value) => setAccountFormData(prev => ({ ...prev, account_type: value as any }))}
+                onValueChange={handleAccountTypeChange}
                 disabled={isViewMode}
               >
                 <SelectTrigger>
@@ -887,39 +1314,77 @@ export default function Contas() {
                   <SelectItem value="checking">Conta Corrente</SelectItem>
                   <SelectItem value="savings">Conta Poupança</SelectItem>
                   <SelectItem value="investment">Conta Investimento</SelectItem>
-                  <SelectItem value="credit">Cartão de Crédito</SelectItem>
                 </SelectContent>
               </Select>
             </div>
+            {/* Campos específicos para contas bancárias (não cartões) */}
+            {accountFormData.account_type !== 'credit' && accountFormData.account_type !== 'debit' && (
+              <>
+                <div>
+                  <Label htmlFor="account_number">Número da Conta *</Label>
+                  <Input
+                    id="account_number"
+                    value={accountFormData.account_number}
+                    onChange={(e) => setAccountFormData(prev => ({ ...prev, account_number: e.target.value }))}
+                    disabled={isViewMode}
+                    placeholder="Ex: 12345-6"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="agency">Agência *</Label>
+                  <Input
+                    id="agency"
+                    value={accountFormData.agency}
+                    onChange={(e) => setAccountFormData(prev => ({ ...prev, agency: e.target.value }))}
+                    disabled={isViewMode}
+                    placeholder="Ex: 0001"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="holder_name">Titular *</Label>
+                  <Input
+                    id="holder_name"
+                    value={accountFormData.holder_name}
+                    onChange={(e) => setAccountFormData(prev => ({ ...prev, holder_name: e.target.value }))}
+                    disabled={isViewMode}
+                    placeholder="Nome do titular da conta"
+                  />
+                </div>
+              </>
+            )}
+
+            {/* Campos específicos para cartões */}
+            {(accountFormData.account_type === 'credit' || accountFormData.account_type === 'debit') && (
+              <>
+                <div>
+                  <Label htmlFor="account_number">Número do Cartão *</Label>
+                  <Input
+                    id="account_number"
+                    value={accountFormData.account_number}
+                    onChange={(e) => setAccountFormData(prev => ({ ...prev, account_number: e.target.value }))}
+                    disabled={isViewMode}
+                    placeholder="Ex: 1234 5678 9012 3456"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="holder_name">Titular do Cartão *</Label>
+                  <Input
+                    id="holder_name"
+                    value={accountFormData.holder_name}
+                    onChange={(e) => setAccountFormData(prev => ({ ...prev, holder_name: e.target.value }))}
+                    disabled={isViewMode}
+                    placeholder="Nome como está no cartão"
+                  />
+                </div>
+              </>
+            )}
+
+            {/* Campos financeiros - sempre visíveis */}
             <div>
-              <Label htmlFor="account_number">Número da Conta *</Label>
-              <Input
-                id="account_number"
-                value={accountFormData.account_number}
-                onChange={(e) => setAccountFormData(prev => ({ ...prev, account_number: e.target.value }))}
-                disabled={isViewMode}
-              />
-            </div>
-            <div>
-              <Label htmlFor="agency">Agência *</Label>
-              <Input
-                id="agency"
-                value={accountFormData.agency}
-                onChange={(e) => setAccountFormData(prev => ({ ...prev, agency: e.target.value }))}
-                disabled={isViewMode}
-              />
-            </div>
-            <div>
-              <Label htmlFor="holder_name">Titular *</Label>
-              <Input
-                id="holder_name"
-                value={accountFormData.holder_name}
-                onChange={(e) => setAccountFormData(prev => ({ ...prev, holder_name: e.target.value }))}
-                disabled={isViewMode}
-              />
-            </div>
-            <div>
-              <Label htmlFor="balance">Saldo Atual</Label>
+              <Label htmlFor="balance">
+                {accountFormData.account_type === 'credit' ? 'Saldo Atual (Fatura)' : 
+                 accountFormData.account_type === 'debit' ? 'Saldo Atual' : 'Saldo Atual'}
+              </Label>
               <Input
                 id="balance"
                 type="number"
@@ -927,10 +1392,15 @@ export default function Contas() {
                 value={accountFormData.balance}
                 onChange={(e) => setAccountFormData(prev => ({ ...prev, balance: parseFloat(e.target.value) || 0 }))}
                 disabled={isViewMode}
+                placeholder={accountFormData.account_type === 'credit' ? 'Valor da fatura atual' : 
+                           accountFormData.account_type === 'debit' ? 'Saldo disponível' : 'Saldo disponível'}
               />
             </div>
             <div>
-              <Label htmlFor="limit">Limite de Crédito</Label>
+              <Label htmlFor="limit">
+                {accountFormData.account_type === 'credit' ? 'Limite Total' : 
+                 accountFormData.account_type === 'debit' ? 'Limite Diário' : 'Limite de Crédito'}
+              </Label>
               <Input
                 id="limit"
                 type="number"
@@ -938,6 +1408,8 @@ export default function Contas() {
                 value={accountFormData.limit}
                 onChange={(e) => setAccountFormData(prev => ({ ...prev, limit: parseFloat(e.target.value) || 0 }))}
                 disabled={isViewMode}
+                placeholder={accountFormData.account_type === 'credit' ? 'Limite total do cartão' : 
+                           accountFormData.account_type === 'debit' ? 'Limite diário de saque' : 'Limite disponível'}
               />
             </div>
             <div>
@@ -966,6 +1438,134 @@ export default function Contas() {
                 </Button>
                 <Button onClick={handleSaveAccount}>
                   {editingAccount ? 'Atualizar' : 'Criar'}
+                </Button>
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de Cartão */}
+      <Dialog open={isCardModalOpen} onOpenChange={setIsCardModalOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {editingCard ? (isViewMode ? 'Visualizar Cartão' : 'Editar Cartão') : 'Novo Cartão'}
+            </DialogTitle>
+            <DialogDescription>
+              {isViewMode ? 'Detalhes do cartão' : 'Preencha os dados do cartão'}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="bank_id">Banco *</Label>
+              <Select
+                value={accountFormData.bank_id}
+                onValueChange={(value) => setAccountFormData(prev => ({ ...prev, bank_id: value }))}
+                disabled={isViewMode}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione um banco" />
+                </SelectTrigger>
+                <SelectContent>
+                  {banks.map((bank) => (
+                    <SelectItem key={bank.id} value={bank.id}>
+                      {bank.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label htmlFor="account_type">Tipo de Cartão *</Label>
+              <Select
+                value={accountFormData.account_type}
+                onValueChange={handleAccountTypeChange}
+                disabled={isViewMode}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="credit">Cartão de Crédito</SelectItem>
+                  <SelectItem value="debit">Cartão de Débito</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label htmlFor="account_number">Número do Cartão *</Label>
+              <Input
+                id="account_number"
+                value={accountFormData.account_number}
+                onChange={(e) => setAccountFormData(prev => ({ ...prev, account_number: e.target.value }))}
+                disabled={isViewMode}
+                placeholder="Ex: 1234 5678 9012 3456"
+              />
+            </div>
+            <div>
+              <Label htmlFor="holder_name">Titular do Cartão *</Label>
+              <Input
+                id="holder_name"
+                value={accountFormData.holder_name}
+                onChange={(e) => setAccountFormData(prev => ({ ...prev, holder_name: e.target.value }))}
+                disabled={isViewMode}
+                placeholder="Nome como está no cartão"
+              />
+            </div>
+            <div>
+              <Label htmlFor="balance">
+                {accountFormData.account_type === 'credit' ? 'Fatura Atual' : 'Saldo Atual'}
+              </Label>
+              <Input
+                id="balance"
+                type="number"
+                step="0.01"
+                value={accountFormData.balance}
+                onChange={(e) => setAccountFormData(prev => ({ ...prev, balance: parseFloat(e.target.value) || 0 }))}
+                disabled={isViewMode}
+                placeholder={accountFormData.account_type === 'credit' ? 'Valor da fatura atual' : 'Saldo disponível'}
+              />
+            </div>
+            <div>
+              <Label htmlFor="limit">
+                {accountFormData.account_type === 'credit' ? 'Limite Total' : 'Limite Diário'}
+              </Label>
+              <Input
+                id="limit"
+                type="number"
+                step="0.01"
+                value={accountFormData.limit}
+                onChange={(e) => setAccountFormData(prev => ({ ...prev, limit: parseFloat(e.target.value) || 0 }))}
+                disabled={isViewMode}
+                placeholder={accountFormData.account_type === 'credit' ? 'Limite total do cartão' : 'Limite diário de saque'}
+              />
+            </div>
+            <div>
+              <Label htmlFor="notes">Observações</Label>
+              <Textarea
+                id="notes"
+                value={accountFormData.notes}
+                onChange={(e) => setAccountFormData(prev => ({ ...prev, notes: e.target.value }))}
+                disabled={isViewMode}
+              />
+            </div>
+            <div className="flex items-center space-x-2">
+              <input
+                type="checkbox"
+                id="is_active"
+                checked={accountFormData.is_active}
+                onChange={(e) => setAccountFormData(prev => ({ ...prev, is_active: e.target.checked }))}
+                disabled={isViewMode}
+              />
+              <Label htmlFor="is_active">Ativo</Label>
+            </div>
+            {!isViewMode && (
+              <div className="flex justify-end space-x-2">
+                <Button variant="outline" onClick={() => setIsCardModalOpen(false)}>
+                  Cancelar
+                </Button>
+                <Button onClick={handleSaveAccount}>
+                  {editingCard ? 'Atualizar' : 'Criar'}
                 </Button>
               </div>
             )}
