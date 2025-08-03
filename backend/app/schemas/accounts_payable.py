@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from typing import Optional, List
 from datetime import date, datetime
 from decimal import Decimal
@@ -93,6 +93,13 @@ class AccountsPayableResponse(BaseModel):
 
     class Config:
         from_attributes = True
+        
+    @field_validator('is_fixed_cost', mode='before')
+    @classmethod
+    def convert_is_fixed_cost(cls, v):
+        if isinstance(v, str):
+            return v == 'S'
+        return v
 
 class AccountsPayableList(BaseModel):
     id: int
@@ -111,11 +118,19 @@ class AccountsPayableList(BaseModel):
     installment_amount: Optional[Decimal] = None
     notes: Optional[str] = None
     reference: Optional[str] = None
+    is_fixed_cost: Optional[bool] = None
     is_overdue: bool
     created_at: datetime
 
     class Config:
         from_attributes = True
+        
+    @field_validator('is_fixed_cost', mode='before')
+    @classmethod
+    def convert_is_fixed_cost(cls, v):
+        if isinstance(v, str):
+            return v == 'S'
+        return v
 
 class InstallmentResponse(BaseModel):
     message: str

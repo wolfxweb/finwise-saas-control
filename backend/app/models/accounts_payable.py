@@ -80,4 +80,9 @@ class AccountsPayable(Base):
     @property
     def is_installment(self):
         """Verifica se é parcelado"""
-        return self.payable_type == PayableType.INSTALLMENT and self.total_installments > 1 
+        return self.payable_type == PayableType.INSTALLMENT and self.total_installments > 1
+    
+    @property
+    def is_fixed_cost_bool(self):
+        """Converte is_fixed_cost de string para boolean"""
+        return self.is_fixed_cost == 'S' if self.is_fixed_cost else False 

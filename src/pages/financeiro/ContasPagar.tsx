@@ -385,7 +385,26 @@ export default function ContasPagar() {
 
   const handleSavePayable = async () => {
     try {
-      if (isInstallmentMode && formData.payable_type === "installment" && formData.total_installments > 1) {
+      if (isInstallmentMode) {
+        // Debug: verificar valores
+        console.log("Debug - formData:", formData);
+        console.log("Debug - supplier_id:", formData.supplier_id);
+        console.log("Debug - supplier_id type:", typeof formData.supplier_id);
+        console.log("Debug - isInstallmentMode:", isInstallmentMode);
+        console.log("Debug - payable_type:", formData.payable_type);
+        console.log("Debug - total_installments:", formData.total_installments);
+        
+        // Validar campos obrigatórios
+        if (!formData.supplier_id || formData.supplier_id === "") {
+          console.log("Debug - Validação falhou: supplier_id vazio");
+          toast({
+            title: "Erro",
+            description: "Fornecedor é obrigatório",
+            variant: "destructive"
+          });
+          return;
+        }
+        
         // Criar parcelamento
         const installmentData = {
           description: formData.description,
@@ -1985,7 +2004,14 @@ export default function ContasPagar() {
                 <Switch
                   id="installment-mode"
                   checked={isInstallmentMode}
-                  onCheckedChange={setIsInstallmentMode}
+                  onCheckedChange={(checked) => {
+                    setIsInstallmentMode(checked);
+                    if (checked) {
+                      setFormData(prev => ({ ...prev, payable_type: "installment" }));
+                    } else {
+                      setFormData(prev => ({ ...prev, payable_type: "cash" }));
+                    }
+                  }}
                   disabled={isViewMode}
                 />
                 <Label htmlFor="installment-mode">Criar parcelamento</Label>
