@@ -169,7 +169,9 @@ export default function Contas() {
   const loadAccounts = async () => {
     try {
       const response = await api.get("/api/v1/accounts/");
-      setAccounts(response.data || []);
+      const accountsData = response.data || [];
+      console.log('Contas carregadas:', accountsData);
+      setAccounts(accountsData);
     } catch (error) {
       console.error("Erro ao carregar contas:", error);
       toast({
@@ -190,32 +192,41 @@ export default function Contas() {
         acc.account_type === 'credit' || acc.account_type === 'debit'
       );
 
+      // Função auxiliar para somar valores com tratamento de NaN/null
+      const safeSum = (values: number[]): number => {
+        return values.reduce((sum, value) => {
+          const numValue = Number(value) || 0;
+          return sum + numValue;
+        }, 0);
+      };
+
       const summaryData: AccountSummary = {
         // Contas Bancárias
         bank_accounts: bankAccounts.length,
-        bank_balance: bankAccounts.reduce((sum, acc) => sum + acc.balance, 0),
-        bank_limit: bankAccounts.reduce((sum, acc) => sum + acc.limit, 0),
-        bank_available: bankAccounts.reduce((sum, acc) => sum + acc.available_balance, 0),
+        bank_balance: safeSum(bankAccounts.map(acc => acc.balance)),
+        bank_limit: safeSum(bankAccounts.map(acc => acc.limit)),
+        bank_available: safeSum(bankAccounts.map(acc => acc.available_balance)),
         bank_active: bankAccounts.filter(acc => acc.is_active).length,
         bank_inactive: bankAccounts.filter(acc => !acc.is_active).length,
         
         // Cartões
         card_accounts: cardAccounts.length,
-        card_balance: cardAccounts.reduce((sum, acc) => sum + acc.balance, 0),
-        card_limit: cardAccounts.reduce((sum, acc) => sum + acc.limit, 0),
-        card_available: cardAccounts.reduce((sum, acc) => sum + acc.available_balance, 0),
+        card_balance: safeSum(cardAccounts.map(acc => acc.balance)),
+        card_limit: safeSum(cardAccounts.map(acc => acc.limit)),
+        card_available: safeSum(cardAccounts.map(acc => acc.available_balance)),
         card_active: cardAccounts.filter(acc => acc.is_active).length,
         card_inactive: cardAccounts.filter(acc => !acc.is_active).length,
         
         // Totais
         total_accounts: accounts.length,
-        total_balance: accounts.reduce((sum, acc) => sum + acc.balance, 0),
-        total_limit: accounts.reduce((sum, acc) => sum + acc.limit, 0),
-        total_available: accounts.reduce((sum, acc) => sum + acc.available_balance, 0),
+        total_balance: safeSum(accounts.map(acc => acc.balance)),
+        total_limit: safeSum(accounts.map(acc => acc.limit)),
+        total_available: safeSum(accounts.map(acc => acc.available_balance)),
         active_accounts: accounts.filter(acc => acc.is_active).length,
         inactive_accounts: accounts.filter(acc => !acc.is_active).length
       };
 
+      console.log('Resumo calculado:', summaryData);
       setSummary(summaryData);
     } catch (error) {
       console.error("Erro ao calcular resumo:", error);

@@ -202,7 +202,13 @@ export function Sidebar({ className }: SidebarProps) {
     if (href === "/app") {
       return location.pathname === "/app";
     }
-    return location.pathname.startsWith(href);
+    // Para URLs que terminam com /, verificar se o pathname é exatamente igual
+    if (href.endsWith('/')) {
+      return location.pathname === href;
+    }
+    // Para URLs que não terminam com /, verificar se o pathname é exatamente igual
+    // ou se o pathname começa com href + /
+    return location.pathname === href || location.pathname.startsWith(href + '/');
   };
 
   const renderMenuItem = (item: MenuItem) => {
@@ -239,7 +245,7 @@ export function Sidebar({ className }: SidebarProps) {
             variant="ghost"
             className={cn(
               "w-full justify-between h-10 px-2",
-              isItemActive && "bg-accent"
+              isItemActive && "bg-blue-600 text-white hover:bg-blue-700"
             )}
             onClick={() => toggleExpanded(item.title)}
           >
@@ -261,7 +267,7 @@ export function Sidebar({ className }: SidebarProps) {
                   variant="ghost"
                   className={cn(
                     "w-full justify-start h-8 px-2 text-sm",
-                    isActive(child.href) && "bg-accent"
+                    isActive(child.href) && "bg-blue-600 text-white hover:bg-blue-700"
                   )}
                   onClick={() => navigate(child.href)}
                 >
@@ -281,7 +287,7 @@ export function Sidebar({ className }: SidebarProps) {
         variant="ghost"
         className={cn(
           "w-full justify-start h-10 px-2",
-          isItemActive && "bg-accent"
+          isItemActive && "bg-blue-600 text-white hover:bg-blue-700"
         )}
         onClick={() => navigate(item.href)}
       >
