@@ -1383,7 +1383,23 @@ export default function ContasReceber() {
                           </div>
                         </TableCell>
                         <TableCell>
-                          {getStatusBadge(receivable.status)}
+                          <div className="flex items-center gap-2">
+                            {getStatusBadge(receivable.status)}
+                            <Select
+                              value={receivable.status}
+                              onValueChange={(value) => handleQuickStatusChange(receivable, value as any)}
+                            >
+                              <SelectTrigger className="w-24">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="pending">Pendente</SelectItem>
+                                <SelectItem value="paid">Pago</SelectItem>
+                                <SelectItem value="overdue">Vencido</SelectItem>
+                                <SelectItem value="cancelled">Cancelado</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center gap-2">

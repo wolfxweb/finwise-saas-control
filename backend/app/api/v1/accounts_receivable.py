@@ -383,26 +383,43 @@ def update_accounts_receivable(
     current_paid_amount = receivable.paid_amount or 0
     current_status = receivable.status
     
-    # Se a conta mudou de status para PAID ou o valor pago aumentou, atualizar saldo
-    if current_account_id and current_status == ReceivableStatus.PAID:
-        # Se mudou de não pago para pago, ou se o valor pago aumentou
-        if (old_status != ReceivableStatus.PAID and current_status == ReceivableStatus.PAID) or \
-           (old_status == ReceivableStatus.PAID and current_paid_amount > old_paid_amount):
+    # Lógica para contas a receber (oposta das contas a pagar):
+    # Se mudou PARA "paid": SOMAR saldo (dinheiro entrou na conta)
+    # Se mudou DE "paid" para outro: DIMINUIR saldo (cancelamento, dinheiro sai)
+    if current_account_id:
+        account = db.query(Account).filter(
+            and_(
+                Account.id == current_account_id,
+                Account.company_id == current_user.company_id
+            )
+        ).first()
+        
+        if account:
+            amount_to_adjust = 0
             
-            account = db.query(Account).filter(
-                and_(
-                    Account.id == current_account_id,
-                    Account.company_id == current_user.company_id
-                )
-            ).first()
+            # Se mudou DE qualquer status PARA "paid"
+            if old_status != ReceivableStatus.PAID and current_status == ReceivableStatus.PAID:
+                # Somar saldo (dinheiro entrou na conta)
+                amount_to_adjust = current_paid_amount
+                print(f"💰 Conta a receber alterada para PAGO: +R$ {current_paid_amount} na conta {account.account_number}")
             
-            if account:
-                # Calcular diferença para adicionar ao saldo
-                amount_to_add = current_paid_amount - (old_paid_amount if old_status == ReceivableStatus.PAID else 0)
-                if amount_to_add > 0:
-                    account.balance += Decimal(str(amount_to_add))
-                    account.available_balance = account.balance + account.limit
-                    print(f"💰 Saldo da conta {account.account_number} atualizado: +R$ {amount_to_add} (Novo saldo: R$ {account.balance})")
+            # Se mudou DE "paid" PARA qualquer outro status
+            elif old_status == ReceivableStatus.PAID and current_status != ReceivableStatus.PAID:
+                # Diminuir saldo (cancelamento/estorno)
+                amount_to_adjust = -old_paid_amount
+                print(f"💸 Conta a receber cancelada/estornada: -R$ {old_paid_amount} da conta {account.account_number}")
+            
+            # Se ambos eram "paid" mas valor pago mudou
+            elif old_status == ReceivableStatus.PAID and current_status == ReceivableStatus.PAID and current_paid_amount != old_paid_amount:
+                # Ajustar pela diferença
+                amount_to_adjust = current_paid_amount - old_paid_amount
+                print(f"💱 Valor recebido ajustado: {amount_to_adjust:+.2f}R$ na conta {account.account_number}")
+            
+            # Aplicar ajuste se necessário
+            if amount_to_adjust != 0:
+                account.balance += Decimal(str(amount_to_adjust))
+                account.available_balance = account.balance + account.limit
+                print(f"🏦 Novo saldo da conta {account.account_number}: R$ {account.balance}")
     
     db.commit()
     db.refresh(receivable)
