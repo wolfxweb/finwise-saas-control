@@ -141,6 +141,23 @@ def create_accounts_payable(
         )
         
         db.add(db_payable)
+        db.flush()  # Para obter o ID antes do commit
+        
+        # Se a conta foi criada como paga e há uma conta bancária associada, atualizar o saldo
+        if payable.status == PayableStatus.PAID and payable.account_id and payable.paid_amount:
+            account = db.query(Account).filter(
+                and_(
+                    Account.id == payable.account_id,
+                    Account.company_id == current_user.company_id
+                )
+            ).first()
+            
+            if account:
+                # Diminuir o valor pago do saldo da conta bancária (dinheiro saiu)
+                account.balance -= Decimal(str(payable.paid_amount))
+                account.available_balance = account.balance + account.limit
+                print(f"💸 Conta a pagar criada como PAGA: -R$ {payable.paid_amount} da conta {account.account_number} (Novo saldo: R$ {account.balance})")
+        
         db.commit()
         db.refresh(db_payable)
         
@@ -637,6 +654,11 @@ def update_accounts_payable(
             detail="Conta a pagar não encontrada"
         )
     
+    # Guardar valores anteriores para comparação
+    old_status = db_payable.status
+    old_paid_amount = db_payable.paid_amount or 0
+    old_account_id = db_payable.account_id
+    
     # Atualizar campos fornecidos
     update_data = payable_update.dict(exclude_unset=True)
     
@@ -646,6 +668,49 @@ def update_accounts_payable(
     
     for field, value in update_data.items():
         setattr(db_payable, field, value)
+    
+    # Atualizar saldo da conta bancária se necessário
+    current_account_id = db_payable.account_id
+    current_paid_amount = db_payable.paid_amount or 0
+    current_status = db_payable.status
+    
+    # Lógica para contas a pagar (inversa das contas a receber):
+    # Se mudou PARA "paid": DIMINUIR saldo (dinheiro saiu da conta)
+    # Se mudou DE "paid" para outro: SOMAR saldo (cancelamento, dinheiro volta)
+    if current_account_id:
+        account = db.query(Account).filter(
+            and_(
+                Account.id == current_account_id,
+                Account.company_id == current_user.company_id
+            )
+        ).first()
+        
+        if account:
+            amount_to_adjust = 0
+            
+            # Se mudou DE qualquer status PARA "paid"
+            if old_status != PayableStatus.PAID and current_status == PayableStatus.PAID:
+                # Diminuir saldo (dinheiro saiu da conta)
+                amount_to_adjust = -current_paid_amount
+                print(f"💸 Conta a pagar alterada para PAGO: -R$ {current_paid_amount} da conta {account.account_number}")
+            
+            # Se mudou DE "paid" PARA qualquer outro status
+            elif old_status == PayableStatus.PAID and current_status != PayableStatus.PAID:
+                # Somar saldo de volta (cancelamento/estorno)
+                amount_to_adjust = old_paid_amount
+                print(f"💰 Conta a pagar cancelada/estornada: +R$ {old_paid_amount} para conta {account.account_number}")
+            
+            # Se ambos eram "paid" mas valor pago mudou
+            elif old_status == PayableStatus.PAID and current_status == PayableStatus.PAID and current_paid_amount != old_paid_amount:
+                # Ajustar pela diferença
+                amount_to_adjust = old_paid_amount - current_paid_amount
+                print(f"💱 Valor pago ajustado: {amount_to_adjust:+.2f}R$ na conta {account.account_number}")
+            
+            # Aplicar ajuste se necessário
+            if amount_to_adjust != 0:
+                account.balance += Decimal(str(amount_to_adjust))
+                account.available_balance = account.balance + account.limit
+                print(f"🏦 Novo saldo da conta {account.account_number}: R$ {account.balance}")
     
     try:
         db.commit()
