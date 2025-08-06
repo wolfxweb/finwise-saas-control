@@ -1302,7 +1302,7 @@ export default function ContasPagar() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">
-                  R$ {useFilteredStats ? calculateFilteredStats().total_payable.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : getSummaryValue('total_payable', 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 }) || '0,00'}
+                  {formatCurrency(useFilteredStats ? calculateFilteredStats().total_payable : getSummaryValue('total_payable', 0))}
                 </div>
                 {useFilteredStats && (
                   <Badge variant="secondary" className="mt-1">Filtrado</Badge>
@@ -1317,7 +1317,7 @@ export default function ContasPagar() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">
-                  R$ {useFilteredStats ? calculateFilteredStats().total_paid.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : getSummaryValue('total_paid', 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 }) || '0,00'}
+                  {formatCurrency(useFilteredStats ? calculateFilteredStats().total_paid : getSummaryValue('total_paid', 0))}
                 </div>
                 {useFilteredStats && (
                   <Badge variant="secondary" className="mt-1">Filtrado</Badge>
@@ -1332,7 +1332,7 @@ export default function ContasPagar() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">
-                  R$ {useFilteredStats ? calculateFilteredStats().total_overdue.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : getSummaryValue('total_overdue', 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 }) || '0,00'}
+                  {formatCurrency(useFilteredStats ? calculateFilteredStats().total_overdue : getSummaryValue('total_overdue', 0))}
                 </div>
                 {useFilteredStats && (
                   <Badge variant="secondary" className="mt-1">Filtrado</Badge>
@@ -1347,7 +1347,7 @@ export default function ContasPagar() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">
-                  R$ {useFilteredStats ? calculateFilteredStats().total_pending.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : getSummaryValue('total_pending', 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 }) || '0,00'}
+                  {formatCurrency(useFilteredStats ? calculateFilteredStats().total_pending : getSummaryValue('total_pending', 0))}
                 </div>
                 {useFilteredStats && (
                   <Badge variant="secondary" className="mt-1">Filtrado</Badge>
@@ -1481,15 +1481,15 @@ export default function ContasPagar() {
                               {payable.payable_type === 'installment' && payable.total_installments > 1 ? (
                                 <>
                                   <div className="font-medium">
-                                    R$ {parseFloat(payable.total_amount.toString()).toLocaleString('pt-BR', { minimumFractionDigits: 2 })} {payable.installment_number}/{payable.total_installments}
-                                  </div>
-                                  <div className="text-sm text-muted-foreground">
-                                    Total: R$ {getInstallmentTotalAmount(payable).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                                                                  {formatCurrency(parseFloat(payable.total_amount.toString()))} {payable.installment_number}/{payable.total_installments}
+                            </div>
+                            <div className="text-sm text-muted-foreground">
+                              Total: {formatCurrency(getInstallmentTotalAmount(payable))}
                                   </div>
                                 </>
                               ) : (
                                 <div className="font-medium">
-                                  R$ {parseFloat(payable.total_amount.toString()).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                                  {formatCurrency(parseFloat(payable.total_amount.toString()))}
                                 </div>
                               )}
                             </div>

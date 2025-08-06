@@ -1122,13 +1122,13 @@ export default function ContasReceber() {
             <DollarSign className="h-4 w-4" />
             Contas a Receber
           </TabsTrigger>
+          <TabsTrigger value="reports" className="flex items-center gap-2">
+            <BarChart3 className="h-4 w-4" />
+            Análise
+          </TabsTrigger>
           <TabsTrigger value="categories" className="flex items-center gap-2">
             <Tag className="h-4 w-4" />
             Categorias
-          </TabsTrigger>
-          <TabsTrigger value="reports" className="flex items-center gap-2">
-            <BarChart3 className="h-4 w-4" />
-            Relatórios
           </TabsTrigger>
         </TabsList>
 
@@ -1517,166 +1517,18 @@ export default function ContasReceber() {
           </Card>
         </TabsContent>
 
-        {/* Aba: Categorias */}
-        <TabsContent value="categories" className="space-y-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-2xl font-semibold">Categorias</h2>
-              <p className="text-muted-foreground">Organize suas contas a receber em categorias</p>
-            </div>
-            <Button onClick={handleCreateCategory} className="bg-gradient-primary text-primary-foreground">
-              <Plus className="mr-2 h-4 w-4" />
-              Nova Categoria
-            </Button>
-          </div>
-
-          {/* Cards de Resumo - Categorias */}
-          <div className="grid gap-6 md:grid-cols-4">
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Total de Categorias</CardTitle>
-                <Tag className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{categories.length}</div>
-                <p className="text-xs text-muted-foreground">Categorias cadastradas</p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Categorias Ativas</CardTitle>
-                <Tag className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-success">
-                  {categories.filter(c => c.is_active).length}
-                </div>
-                <p className="text-xs text-muted-foreground">Ativas no sistema</p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Categorias Raiz</CardTitle>
-                <Tag className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-primary">
-                  {categories.filter(c => !c.parent_id).length}
-                </div>
-                <p className="text-xs text-muted-foreground">Categorias principais</p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Subcategorias</CardTitle>
-                <Tag className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-warning">
-                  {categories.filter(c => c.parent_id).length}
-                </div>
-                <p className="text-xs text-muted-foreground">Categorias filhas</p>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Lista de Categorias */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Gerenciamento de Categorias</CardTitle>
-              <CardDescription>Lista de todas as categorias cadastradas</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <div className="flex items-center space-x-4">
-                  <Input
-                    placeholder="Buscar categorias..."
-                    className="max-w-sm"
-                  />
-                  <Select>
-                    <SelectTrigger className="w-48">
-                      <SelectValue placeholder="Filtrar por status" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Todas</SelectItem>
-                      <SelectItem value="active">Ativas</SelectItem>
-                      <SelectItem value="inactive">Inativas</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                
-                <div className="border rounded-lg">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Nome</TableHead>
-                        <TableHead>Código</TableHead>
-                        <TableHead>Descrição</TableHead>
-                        <TableHead>Contas</TableHead>
-                        <TableHead>Subcategorias</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Ações</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {categories.map((category) => (
-                        <TableRow key={category.id}>
-                          <TableCell className="font-medium">{category.name}</TableCell>
-                          <TableCell>{category.code}</TableCell>
-                          <TableCell className="max-w-xs truncate">
-                            {category.description || "-"}
-                          </TableCell>
-                          <TableCell>
-                            <Badge variant="outline">{category.receivables_count}</Badge>
-                          </TableCell>
-                          <TableCell>
-                            <Badge variant="outline">{category.children_count}</Badge>
-                          </TableCell>
-                          <TableCell>
-                            <Badge variant={category.is_active ? "default" : "secondary"}>
-                              {category.is_active ? "Ativa" : "Inativa"}
-                            </Badge>
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex items-center space-x-2">
-                              <Button 
-                                variant="outline" 
-                                size="sm"
-                                onClick={() => handleEditCategory(category)}
-                              >
-                                Editar
-                              </Button>
-                              <Button 
-                                variant="outline" 
-                                size="sm"
-                                onClick={() => handleDeleteCategory(category.id)}
-                              >
-                                Remover
-                              </Button>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* Aba: Relatórios */}
+        {/* Aba: Análise */}
         <TabsContent value="reports" className="space-y-6">
           {/* Filtros Globais para Relatórios */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center justify-between">
-                Filtros para Relatórios
+                Filtros para Análise
                 {hasActiveFiltersRelatorio() && (
                   <Badge variant="secondary" className="ml-2">Filtros Ativos</Badge>
                 )}
               </CardTitle>
-              <CardDescription>Configure os filtros para refinar todos os relatórios</CardDescription>
+              <CardDescription>Configure os filtros para refinar todas as análises</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
@@ -1865,23 +1717,23 @@ export default function ContasReceber() {
                   </Select>
                   <Button variant="outline">
                     <Download className="h-4 w-4 mr-2" />
-                    Exportar Relatório
+                    Exportar Análise
                   </Button>
                 </div>
               </div>
             </CardContent>
           </Card>
 
-          {/* Controles de Relatório */}
+          {/* Controles de Análise */}
           <Card>
             <CardHeader>
-              <CardTitle>Relatórios de Contas a Receber</CardTitle>
+              <CardTitle>Análise de Contas a Receber</CardTitle>
               <CardDescription>Análises gráficas e insights das suas contas a receber</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="flex items-center justify-between mb-6">
                 <div className="text-sm text-muted-foreground">
-                  Todos os relatórios abaixo refletem os filtros aplicados acima
+                  Todas as análises abaixo refletem os filtros aplicados acima
                 </div>
               </div>
 
@@ -2038,8 +1890,6 @@ export default function ContasReceber() {
                 </Card>
               </div>
 
-
-
               {/* Gráfico de Linha - Evolução por Cliente */}
               <Card>
                 <CardHeader>
@@ -2107,6 +1957,156 @@ export default function ContasReceber() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        {/* Aba: Categorias */}
+        <TabsContent value="categories" className="space-y-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-2xl font-semibold">Categorias</h2>
+              <p className="text-muted-foreground">Organize suas contas a receber em categorias</p>
+            </div>
+            <Button onClick={handleCreateCategory} className="bg-gradient-primary text-primary-foreground">
+              <Plus className="mr-2 h-4 w-4" />
+              Nova Categoria
+            </Button>
+          </div>
+
+          {/* Cards de Resumo - Categorias */}
+          <div className="grid gap-6 md:grid-cols-4">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Total de Categorias</CardTitle>
+                <Tag className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{categories.length}</div>
+                <p className="text-xs text-muted-foreground">Categorias cadastradas</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Categorias Ativas</CardTitle>
+                <Tag className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-success">
+                  {categories.filter(c => c.is_active).length}
+                </div>
+                <p className="text-xs text-muted-foreground">Ativas no sistema</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Categorias Raiz</CardTitle>
+                <Tag className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-primary">
+                  {categories.filter(c => !c.parent_id).length}
+                </div>
+                <p className="text-xs text-muted-foreground">Categorias principais</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Subcategorias</CardTitle>
+                <Tag className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-warning">
+                  {categories.filter(c => c.parent_id).length}
+                </div>
+                <p className="text-xs text-muted-foreground">Categorias filhas</p>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Lista de Categorias */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Gerenciamento de Categorias</CardTitle>
+              <CardDescription>Lista de todas as categorias cadastradas</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                <div className="flex items-center space-x-4">
+                  <Input
+                    placeholder="Buscar categorias..."
+                    className="max-w-sm"
+                  />
+                  <Select>
+                    <SelectTrigger className="w-48">
+                      <SelectValue placeholder="Filtrar por status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todas</SelectItem>
+                      <SelectItem value="active">Ativas</SelectItem>
+                      <SelectItem value="inactive">Inativas</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                
+                <div className="border rounded-lg">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Nome</TableHead>
+                        <TableHead>Código</TableHead>
+                        <TableHead>Descrição</TableHead>
+                        <TableHead>Contas</TableHead>
+                        <TableHead>Subcategorias</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Ações</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {categories.map((category) => (
+                        <TableRow key={category.id}>
+                          <TableCell className="font-medium">{category.name}</TableCell>
+                          <TableCell>{category.code}</TableCell>
+                          <TableCell className="max-w-xs truncate">
+                            {category.description || "-"}
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline">{category.receivables_count}</Badge>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline">{category.children_count}</Badge>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant={category.is_active ? "default" : "secondary"}>
+                              {category.is_active ? "Ativa" : "Inativa"}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center space-x-2">
+                              <Button 
+                                variant="outline" 
+                                size="sm"
+                                onClick={() => handleEditCategory(category)}
+                              >
+                                Editar
+                              </Button>
+                              <Button 
+                                variant="outline" 
+                                size="sm"
+                                onClick={() => handleDeleteCategory(category.id)}
+                              >
+                                Remover
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+
       </Tabs>
 
       {/* Modal */}
