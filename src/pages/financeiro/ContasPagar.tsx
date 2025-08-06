@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Plus, Search, Filter, Download, Edit, Eye, Trash2, Save, X, Calendar, DollarSign, Users, BarChart3, Tag, AlertCircle, ChevronUp, ChevronDown, TrendingUp, Clock } from "lucide-react";
+import { Plus, Search, Filter, Download, Edit, Eye, Trash2, Save, X, Calendar, DollarSign, Users, BarChart3, Tag, AlertCircle, ChevronUp, ChevronDown, TrendingUp, Clock, Target, TrendingDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -50,6 +50,20 @@ interface Category {
   created_at: string;
 }
 
+interface Account {
+  id: number;
+  bank_id: number;
+  bank_name: string;
+  account_type: 'checking' | 'savings' | 'investment' | 'credit' | 'debit';
+  account_number: string;
+  agency: string;
+  holder_name: string;
+  balance: number;
+  limit: number;
+  is_active: boolean;
+  notes?: string;
+}
+
 interface AccountsPayable {
   id: number;
   description: string;
@@ -91,16 +105,91 @@ interface AccountsPayableSummary {
   }>;
 }
 
+interface PayableAnalysisMonth {
+  month: string;
+  year: number;
+  total_amount: number;
+  paid_amount: number;
+  pending_amount: number;
+  overdue_amount: number;
+  count_total: number;
+  count_paid: number;
+  count_pending: number;
+  count_overdue: number;
+}
+
+interface PayableAnalysisCategory {
+  category_id?: number;
+  category_name: string;
+  total_amount: number;
+  percentage: number;
+  count: number;
+}
+
+interface PayableAnalysisSupplier {
+  supplier_id: string;
+  supplier_name: string;
+  total_amount: number;
+  percentage: number;
+  count: number;
+}
+
+interface PayableAnalysisForecast {
+  date: string;
+  amount: number;
+  description: string;
+  supplier_name: string;
+  category_name?: string;
+  is_fixed_cost: boolean;
+}
+
+interface PayableAnalysisResponse {
+  current_month: PayableAnalysisMonth;
+  next_months: PayableAnalysisMonth[];
+  categories: PayableAnalysisCategory[];
+  suppliers: PayableAnalysisSupplier[];
+  forecast: PayableAnalysisForecast[];
+  summary: {
+    total_analysis_period: number;
+    total_pending_period: number;
+    total_forecast_30_days: number;
+    fixed_costs_percentage: number;
+    top_category?: string;
+    top_supplier?: string;
+  };
+}
+
 export default function ContasPagar() {
   const { toast } = useToast();
+  
+  // Função para formatar valores em Real Brasileiro
+  const formatCurrency = (value: number) => {
+    return new Intl.NumberFormat('pt-BR', {
+      style: 'currency',
+      currency: 'BRL',
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    }).format(value);
+  };
   const [payables, setPayables] = useState<AccountsPayable[]>([]);
   const [summary, setSummary] = useState<AccountsPayableSummary | null>(null);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
-  const [accounts, setAccounts] = useState<any[]>([]);
+  const [accounts, setAccounts] = useState<Account[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [filterStatus, setFilterStatus] = useState<string>("all");
+  
+  // Estados para análise
+  const [analysisData, setAnalysisData] = useState<PayableAnalysisResponse | null>(null);
+  const [isLoadingAnalysis, setIsLoadingAnalysis] = useState(false);
+  const [analysisFilters, setAnalysisFilters] = useState({
+    months_ahead: 6,
+    category_filter: '',
+    supplier_filter: '',
+    status_filter: '',
+    cost_type_filter: 'both'
+  });
   
   // Estados para filtros avançados
   const [isFilterDialogOpen, setIsFilterDialogOpen] = useState(false);
@@ -208,7 +297,11 @@ export default function ContasPagar() {
     loadData();
   }, []);
 
-
+  useEffect(() => {
+    if (activeMainTab === "analysis") {
+      loadAnalysisData();
+    }
+  }, [activeMainTab, analysisFilters]);
 
   // Resetar página quando filtros mudarem
   useEffect(() => {
@@ -290,6 +383,40 @@ export default function ContasPagar() {
       setAccounts(accountsData);
     } catch (error) {
       console.error("Erro ao carregar contas:", error);
+    }
+  };
+
+  const loadAnalysisData = async () => {
+    try {
+      setIsLoadingAnalysis(true);
+      
+      const params = new URLSearchParams();
+      params.append('months_ahead', analysisFilters.months_ahead.toString());
+      
+      if (analysisFilters.category_filter) {
+        params.append('category_filter', analysisFilters.category_filter);
+      }
+      if (analysisFilters.supplier_filter) {
+        params.append('supplier_filter', analysisFilters.supplier_filter);
+      }
+      if (analysisFilters.status_filter) {
+        params.append('status_filter', analysisFilters.status_filter);
+      }
+      if (analysisFilters.cost_type_filter) {
+        params.append('cost_type_filter', analysisFilters.cost_type_filter);
+      }
+      
+      const response = await api.get(`/api/v1/accounts-payable/analysis?${params.toString()}`);
+      setAnalysisData(response.data);
+    } catch (error) {
+      console.error("Erro ao carregar dados de análise:", error);
+      toast({
+        title: "Erro",
+        description: "Não foi possível carregar os dados de análise",
+        variant: "destructive"
+      });
+    } finally {
+      setIsLoadingAnalysis(false);
     }
   };
 
@@ -1157,8 +1284,11 @@ export default function ContasPagar() {
       <Tabs value={activeMainTab} onValueChange={setActiveMainTab} className="space-y-6">
         <TabsList className="grid w-full grid-cols-3">
           <TabsTrigger value="payables">Contas a Pagar</TabsTrigger>
+          <TabsTrigger value="analysis">
+            <BarChart3 className="h-4 w-4 mr-2" />
+            Análise
+          </TabsTrigger>
           <TabsTrigger value="categories">Categorias</TabsTrigger>
-          <TabsTrigger value="reports">Relatórios</TabsTrigger>
         </TabsList>
 
         {/* Aba Contas a Pagar */}
@@ -1453,6 +1583,414 @@ export default function ContasPagar() {
           </Card>
         </TabsContent>
 
+        {/* Aba Análise */}
+        <TabsContent value="analysis" className="space-y-6">
+          {/* Filtros de Análise */}
+          <Card>
+            <CardHeader>
+              <div className="flex justify-between items-center">
+                <div>
+                  <CardTitle>Filtros de Análise</CardTitle>
+                  <CardDescription>Configure os parâmetros para análise e previsão</CardDescription>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setAnalysisFilters({
+                    months_ahead: 6,
+                    category_filter: '',
+                    supplier_filter: '',
+                    status_filter: '',
+                    cost_type_filter: 'both'
+                  })}
+                >
+                  <X className="h-4 w-4 mr-2" />
+                  Limpar Filtros
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+                <div>
+                  <Label>Meses à Frente</Label>
+                  <Select 
+                    value={analysisFilters.months_ahead.toString()} 
+                    onValueChange={(value) => setAnalysisFilters(prev => ({ ...prev, months_ahead: parseInt(value) }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="3">3 meses</SelectItem>
+                      <SelectItem value="6">6 meses</SelectItem>
+                      <SelectItem value="9">9 meses</SelectItem>
+                      <SelectItem value="12">12 meses</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>Categoria</Label>
+                  <Select 
+                    value={analysisFilters.category_filter} 
+                    onValueChange={(value) => setAnalysisFilters(prev => ({ ...prev, category_filter: value }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Todas" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="">Todas</SelectItem>
+                      {categories.map((category) => (
+                        <SelectItem key={category.id} value={category.id.toString()}>
+                          {category.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>Fornecedor</Label>
+                  <Select 
+                    value={analysisFilters.supplier_filter} 
+                    onValueChange={(value) => setAnalysisFilters(prev => ({ ...prev, supplier_filter: value }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Todos" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="">Todos</SelectItem>
+                      {suppliers.map((supplier) => (
+                        <SelectItem key={supplier.id} value={supplier.id}>
+                          {supplier.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>Status</Label>
+                  <Select 
+                    value={analysisFilters.status_filter} 
+                    onValueChange={(value) => setAnalysisFilters(prev => ({ ...prev, status_filter: value }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Todos" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="">Todos</SelectItem>
+                      <SelectItem value="pending">Pendente</SelectItem>
+                      <SelectItem value="paid">Pago</SelectItem>
+                      <SelectItem value="overdue">Vencido</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>Tipo de Custo</Label>
+                  <Select 
+                    value={analysisFilters.cost_type_filter} 
+                    onValueChange={(value) => setAnalysisFilters(prev => ({ ...prev, cost_type_filter: value }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="both">Ambos</SelectItem>
+                      <SelectItem value="fixed">Apenas Fixos</SelectItem>
+                      <SelectItem value="variable">Apenas Variáveis</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {isLoadingAnalysis ? (
+            <Card>
+              <CardContent className="flex items-center justify-center py-12">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                <span className="ml-2">Carregando análise...</span>
+              </CardContent>
+            </Card>
+          ) : analysisData ? (
+            <>
+              {/* Cards de Resumo da Análise */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Total do Período</CardTitle>
+                    <DollarSign className="h-4 w-4 text-muted-foreground" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold">
+                      {formatCurrency(analysisData.summary.total_analysis_period)}
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Próximos {analysisFilters.months_ahead} meses
+                    </p>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Pendente no Período</CardTitle>
+                    <Clock className="h-4 w-4 text-muted-foreground" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold">
+                      {formatCurrency(analysisData.summary.total_pending_period)}
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      A vencer no período
+                    </p>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Previsão 30 Dias</CardTitle>
+                    <Target className="h-4 w-4 text-muted-foreground" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold">
+                      {formatCurrency(analysisData.summary.total_forecast_30_days)}
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {analysisData.forecast.length} contas a vencer
+                    </p>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Maior Categoria</CardTitle>
+                    <Tag className="h-4 w-4 text-muted-foreground" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-lg font-bold truncate">
+                      {analysisData.summary.top_category || "N/A"}
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Top supplier: {analysisData.summary.top_supplier || "N/A"}
+                    </p>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Gráficos */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Evolução Mensal */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Evolução Mensal</CardTitle>
+                    <CardDescription>Valores por mês (atual + próximos {analysisFilters.months_ahead} meses)</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <ResponsiveContainer width="100%" height={300}>
+                      <BarChart data={[analysisData.current_month, ...analysisData.next_months].map(month => ({
+                        month: `${month.month.slice(0, 3)}/${month.year}`,
+                        total: month.total_amount,
+                        pendente: month.pending_amount,
+                        pago: month.paid_amount,
+                        vencido: month.overdue_amount
+                      }))}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="month" />
+                        <YAxis />
+                        <Tooltip formatter={(value) => formatCurrency(Number(value))} />
+                        <Legend />
+                        <Bar dataKey="pago" stackId="a" fill="#82ca9d" name="Pago" />
+                        <Bar dataKey="pendente" stackId="a" fill="#ffc658" name="Pendente" />
+                        <Bar dataKey="vencido" stackId="a" fill="#ff6b6b" name="Vencido" />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </CardContent>
+                </Card>
+
+                {/* Distribuição por Categoria */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Distribuição por Categoria</CardTitle>
+                    <CardDescription>Percentual por categoria no período</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+
+                                          {analysisData.categories && analysisData.categories.length > 0 ? (
+                        <ResponsiveContainer width="100%" height={300}>
+                          <PieChart>
+                            <Pie
+                              data={analysisData.categories.slice(0, 8).map((cat, index) => ({
+                                name: cat.category_name || 'Sem Categoria',
+                                value: Number(cat.total_amount) || 0,
+                                percentage: cat.percentage || 0,
+                                id: cat.category_id || `no-category-${index}`
+                              }))}
+                              cx="50%"
+                              cy="50%"
+                              labelLine={false}
+                              label={({ name, percentage }) => `${name} ${percentage?.toFixed(1) || 0}%`}
+                              outerRadius={80}
+                              fill="#8884d8"
+                              dataKey="value"
+                            >
+                              {analysisData.categories.slice(0, 8).map((entry, index) => {
+                                const colors = ['#8884d8', '#82ca9d', '#ffc658', '#ff7c7c', '#8dd1e1', '#d084d0', '#87ceeb', '#ffb347'];
+                                return <Cell key={`cell-${index}`} fill={colors[index % colors.length]} />;
+                              })}
+                            </Pie>
+                            <Tooltip formatter={(value) => formatCurrency(Number(value))} />
+                          </PieChart>
+                        </ResponsiveContainer>
+                    ) : (
+                      <div className="flex items-center justify-center h-[300px] text-muted-foreground">
+                        <div className="text-center">
+                          <BarChart3 className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                          <p>Nenhum dado de categoria encontrado</p>
+                          <p className="text-sm">Verifique se há contas a pagar no período selecionado</p>
+                        </div>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* Top Fornecedores */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Top Fornecedores</CardTitle>
+                    <CardDescription>Maiores valores por fornecedor</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <ResponsiveContainer width="100%" height={300}>
+                      <BarChart data={analysisData.suppliers.slice(0, 10).map(sup => ({
+                        supplier: sup.supplier_name.length > 15 ? sup.supplier_name.slice(0, 15) + '...' : sup.supplier_name,
+                        total: sup.total_amount,
+                        percentage: sup.percentage
+                      }))}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="supplier" />
+                        <YAxis />
+                        <Tooltip 
+                          formatter={(value) => formatCurrency(Number(value))}
+                          labelFormatter={(label) => analysisData.suppliers.find(s => s.supplier_name.startsWith(label.replace('...', '')))?.supplier_name || label}
+                        />
+                        <Bar dataKey="total" fill="#8884d8" />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </CardContent>
+                </Card>
+
+                {/* Previsão de Caixa (30 dias) */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Previsão de Caixa - 30 Dias</CardTitle>
+                    <CardDescription>Contas a vencer nos próximos 30 dias</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-4 max-h-[300px] overflow-y-auto">
+                      {analysisData.forecast.length > 0 ? (
+                        analysisData.forecast.map((item, index) => (
+                          <div key={index} className="flex items-center justify-between p-3 border rounded-lg">
+                            <div className="flex-1">
+                              <div className="font-medium">{item.description}</div>
+                              <div className="text-sm text-muted-foreground">
+                                {item.supplier_name} • {new Date(item.date).toLocaleDateString('pt-BR')}
+                                {item.is_fixed_cost && (
+                                  <Badge variant="outline" className="ml-2 text-xs">Fixo</Badge>
+                                )}
+                              </div>
+                              {item.category_name && (
+                                <div className="text-xs text-muted-foreground">{item.category_name}</div>
+                              )}
+                            </div>
+                            <div className="text-right">
+                              <div className="font-bold">
+                                {formatCurrency(item.amount)}
+                              </div>
+                              <div className="text-xs text-muted-foreground">
+                                {Math.ceil((new Date(item.date).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))} dias
+                              </div>
+                            </div>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="text-center py-8 text-muted-foreground">
+                          Nenhuma conta a vencer nos próximos 30 dias
+                        </div>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Tabelas de Análise */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Resumo por Categoria */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Resumo por Categoria</CardTitle>
+                    <CardDescription>Detalhamento por categoria</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-2">
+                      {analysisData.categories.slice(0, 10).map((category, index) => (
+                        <div key={index} className="flex items-center justify-between p-2 border-b">
+                          <div>
+                            <div className="font-medium">{category.category_name}</div>
+                            <div className="text-sm text-muted-foreground">{category.count} contas</div>
+                          </div>
+                          <div className="text-right">
+                            <div className="font-bold">
+                              {formatCurrency(category.total_amount)}
+                            </div>
+                            <div className="text-sm text-muted-foreground">
+                              {category.percentage.toFixed(1)}%
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Resumo por Fornecedor */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Resumo por Fornecedor</CardTitle>
+                    <CardDescription>Detalhamento por fornecedor</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-2">
+                      {analysisData.suppliers.slice(0, 10).map((supplier, index) => (
+                        <div key={index} className="flex items-center justify-between p-2 border-b">
+                          <div>
+                            <div className="font-medium">{supplier.supplier_name}</div>
+                            <div className="text-sm text-muted-foreground">{supplier.count} contas</div>
+                          </div>
+                          <div className="text-right">
+                            <div className="font-bold">
+                              {formatCurrency(supplier.total_amount)}
+                            </div>
+                            <div className="text-sm text-muted-foreground">
+                              {supplier.percentage.toFixed(1)}%
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            </>
+          ) : (
+            <Card>
+              <CardContent className="flex items-center justify-center py-12">
+                <div className="text-center">
+                  <BarChart3 className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                  <p className="text-muted-foreground">Nenhum dado de análise disponível</p>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+
         {/* Aba Categorias */}
         <TabsContent value="categories" className="space-y-6">
           <Card>
@@ -1518,187 +2056,6 @@ export default function ContasPagar() {
               </div>
             </CardContent>
           </Card>
-        </TabsContent>
-
-        {/* Aba Relatórios */}
-        <TabsContent value="reports" className="space-y-6">
-          {/* Filtros globais de relatório */}
-          <Card>
-            <CardHeader>
-              <div className="flex justify-between items-center">
-                <div>
-                  <CardTitle>Filtros de Relatório</CardTitle>
-                  <CardDescription>Aplique filtros para todos os gráficos</CardDescription>
-                </div>
-                <div className="flex gap-2">
-                  {hasActiveFiltersRelatorio() && (
-                    <Button variant="outline" onClick={limparFiltrosRelatorio}>
-                      <X className="h-4 w-4 mr-2" />
-                      Limpar Filtros
-                    </Button>
-                  )}
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                <div>
-                  <Label>Período</Label>
-                  <Select value={reportPeriod} onValueChange={setReportPeriod}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="todos">Todos</SelectItem>
-                      <SelectItem value="ultima_semana">Última Semana</SelectItem>
-                      <SelectItem value="ultimo_mes">Último Mês</SelectItem>
-                      <SelectItem value="ultimos_3_meses">Últimos 3 Meses</SelectItem>
-                      <SelectItem value="ultimo_ano">Último Ano</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label>Status</Label>
-                  <Select value={filtrosRelatorio.status} onValueChange={(value) => setFiltrosRelatorio(prev => ({ ...prev, status: value }))}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Todos" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="">Todos</SelectItem>
-                      <SelectItem value="pending">Pendente</SelectItem>
-                      <SelectItem value="paid">Pago</SelectItem>
-                      <SelectItem value="overdue">Vencido</SelectItem>
-                      <SelectItem value="cancelled">Cancelado</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label>Tipo</Label>
-                  <Select value={filtrosRelatorio.tipo} onValueChange={(value) => setFiltrosRelatorio(prev => ({ ...prev, tipo: value }))}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Todos" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="">Todos</SelectItem>
-                      <SelectItem value="cash">À Vista</SelectItem>
-                      <SelectItem value="installment">Parcelado</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label>Fornecedor</Label>
-                  <Input
-                    placeholder="Buscar fornecedor..."
-                    value={filtrosRelatorio.fornecedor}
-                    onChange={(e) => setFiltrosRelatorio(prev => ({ ...prev, fornecedor: e.target.value }))}
-                  />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Gráficos */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Evolução Mensal */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Evolução Mensal {hasActiveFiltersRelatorio() && <Badge variant="secondary">Filtrado</Badge>}</CardTitle>
-                <CardDescription>Valores por mês</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <ResponsiveContainer width="100%" height={300}>
-                  <LineChart data={reportData.monthlyData} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="month" />
-                    <YAxis />
-                    <Tooltip formatter={(value) => `R$ ${Number(value).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`} />
-                    <Legend />
-                    <Line type="monotone" dataKey="total" stroke="#8884d8" name="Total" />
-                    <Line type="monotone" dataKey="paid" stroke="#82ca9d" name="Pago" />
-                    <Line type="monotone" dataKey="pending" stroke="#ffc658" name="Pendente" />
-                  </LineChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
-
-            {/* Distribuição por Status */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Distribuição por Status {hasActiveFiltersRelatorio() && <Badge variant="secondary">Filtrado</Badge>}</CardTitle>
-                <CardDescription>Quantidade por status</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <ResponsiveContainer width="100%" height={300}>
-                  <PieChart margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
-                    <Pie
-                      data={reportData.statusData}
-                      cx="50%"
-                      cy="50%"
-                      labelLine={false}
-                      label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                      outerRadius={80}
-                      fill="#8884d8"
-                      dataKey="value"
-                    >
-                      {reportData.statusData && reportData.statusData.length > 0 && reportData.statusData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.color} />
-                      ))}
-                    </Pie>
-                    <Tooltip />
-                  </PieChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
-
-            {/* Top Fornecedores */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Top Fornecedores {hasActiveFiltersRelatorio() && <Badge variant="secondary">Filtrado</Badge>}</CardTitle>
-                <CardDescription>Maiores valores por fornecedor</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <ResponsiveContainer width="100%" height={300}>
-                  <BarChart data={reportData.supplierData} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="supplier" />
-                    <YAxis />
-                    <Tooltip formatter={(value) => `R$ ${Number(value).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`} />
-                    <Bar dataKey="total" fill="#8884d8" />
-                  </BarChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
-
-            {/* Evolução por Fornecedor */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Evolução por Fornecedor {hasActiveFiltersRelatorio() && <Badge variant="secondary">Filtrado</Badge>}</CardTitle>
-                <CardDescription>Evolução mensal por fornecedor</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <ResponsiveContainer width="100%" height={300}>
-                  <LineChart data={reportData.supplierEvolutionData} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="month" />
-                    <YAxis />
-                    <Tooltip formatter={(value) => `R$ ${Number(value).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`} />
-                    <Legend />
-                    {reportData.supplierEvolutionData.length > 0 && 
-                     Object.keys(reportData.supplierEvolutionData[0]).filter(key => key !== 'month').slice(0, 5).map((supplier, index) => (
-                       <Line
-                         key={supplier}
-                         type="monotone"
-                         dataKey={supplier}
-                         stroke={`hsl(${index * 60}, 70%, 50%)`}
-                         name={supplier}
-                       />
-                     ))
-                    }
-                  </LineChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
-          </div>
         </TabsContent>
       </Tabs>
 

@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import and_, or_, func, desc
+from sqlalchemy import and_, or_, func, desc, case, cast, String, extract
 from typing import List, Optional
 from datetime import datetime, date, timedelta
 from decimal import Decimal
@@ -18,8 +18,51 @@ from app.schemas.accounts_payable import (
     AccountsPayableCreate, AccountsPayableUpdate, AccountsPayableResponse, 
     AccountsPayableList, AccountsPayableSummary, InstallmentCreate, InstallmentResponse
 )
+from pydantic import BaseModel
 
 router = APIRouter()
+
+class PayableAnalysisMonth(BaseModel):
+    month: str
+    year: int
+    total_amount: Decimal
+    paid_amount: Decimal
+    pending_amount: Decimal
+    overdue_amount: Decimal
+    count_total: int
+    count_paid: int
+    count_pending: int
+    count_overdue: int
+
+class PayableAnalysisCategory(BaseModel):
+    category_id: Optional[int]
+    category_name: str
+    total_amount: Decimal
+    percentage: float
+    count: int
+
+class PayableAnalysisSupplier(BaseModel):
+    supplier_id: str
+    supplier_name: str
+    total_amount: Decimal
+    percentage: float
+    count: int
+
+class PayableAnalysisForecast(BaseModel):
+    date: date
+    amount: Decimal
+    description: str
+    supplier_name: str
+    category_name: Optional[str]
+    is_fixed_cost: bool
+
+class PayableAnalysisResponse(BaseModel):
+    current_month: PayableAnalysisMonth
+    next_months: List[PayableAnalysisMonth]
+    categories: List[PayableAnalysisCategory]
+    suppliers: List[PayableAnalysisSupplier]
+    forecast: List[PayableAnalysisForecast]
+    summary: dict
 
 @router.post("/", response_model=AccountsPayableResponse, status_code=status.HTTP_201_CREATED)
 def create_accounts_payable(
@@ -269,6 +312,290 @@ def get_accounts_payable(
     
     return payables
 
+@router.get("/analysis", response_model=PayableAnalysisResponse)
+def get_payables_analysis(
+    months_ahead: int = Query(6, ge=1, le=12),
+    category_filter: Optional[int] = None,
+    supplier_filter: Optional[str] = None,
+    status_filter: Optional[str] = None,
+    cost_type_filter: Optional[str] = Query(None, description="fixed, variable, or both"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Obter análise detalhada de contas a pagar com dados para gráficos e previsão"""
+    
+    try:
+        from dateutil.relativedelta import relativedelta
+        
+        today = date.today()
+        current_month_start = today.replace(day=1)
+        
+        # Filtros base
+        base_filters = [AccountsPayable.company_id == current_user.company_id]
+        
+        if category_filter:
+            base_filters.append(AccountsPayable.category_id == category_filter)
+        if supplier_filter:
+            base_filters.append(AccountsPayable.supplier_id == supplier_filter)
+        if status_filter:
+            base_filters.append(AccountsPayable.status == status_filter)
+        
+        # Filtro por tipo de custo
+        if cost_type_filter == "fixed":
+            # Apenas custos fixos ('S', 'SIM', '1', etc.)
+            base_filters.append(
+                or_(
+                    AccountsPayable.is_fixed_cost == 'S',
+                    AccountsPayable.is_fixed_cost == 'SIM',
+                    AccountsPayable.is_fixed_cost == '1',
+                    AccountsPayable.is_fixed_cost == 'Y',
+                    AccountsPayable.is_fixed_cost == 'YES'
+                )
+            )
+        elif cost_type_filter == "variable":
+            # Apenas custos variáveis ('N', 'NAO', '0', null, etc.)
+            base_filters.append(
+                or_(
+                    AccountsPayable.is_fixed_cost == 'N',
+                    AccountsPayable.is_fixed_cost == 'NAO',
+                    AccountsPayable.is_fixed_cost == '0',
+                    AccountsPayable.is_fixed_cost == '',
+                    AccountsPayable.is_fixed_cost.is_(None)
+                )
+            )
+        # Se cost_type_filter == "both" ou None, não aplica filtro (mostra todos)
+        
+        # 1. ANÁLISE DO MÊS ATUAL
+        current_month_end = (current_month_start + relativedelta(months=1)) - timedelta(days=1)
+        
+        current_month_data = db.query(
+            func.sum(AccountsPayable.total_amount).label('total_amount'),
+            func.sum(case(
+                (AccountsPayable.status == 'paid', AccountsPayable.paid_amount),
+                else_=0
+            )).label('paid_amount'),
+            func.sum(case(
+                (AccountsPayable.status == 'pending', AccountsPayable.total_amount - AccountsPayable.paid_amount),
+                else_=0
+            )).label('pending_amount'),
+            func.sum(case(
+                (and_(
+                    AccountsPayable.status.in_(['pending', 'overdue']),
+                    AccountsPayable.due_date < today
+                ), AccountsPayable.total_amount - AccountsPayable.paid_amount),
+                else_=0
+            )).label('overdue_amount'),
+            func.count(AccountsPayable.id).label('count_total'),
+            func.sum(case(
+                (AccountsPayable.status == 'paid', 1),
+                else_=0
+            )).label('count_paid'),
+            func.sum(case(
+                (AccountsPayable.status == 'pending', 1),
+                else_=0
+            )).label('count_pending'),
+            func.sum(case(
+                (and_(
+                    AccountsPayable.status.in_(['pending', 'overdue']),
+                    AccountsPayable.due_date < today
+                ), 1),
+                else_=0
+            )).label('count_overdue')
+        ).filter(
+            and_(
+                AccountsPayable.due_date >= current_month_start,
+                AccountsPayable.due_date <= current_month_end,
+                *base_filters
+            )
+        ).first()
+        
+        current_month = PayableAnalysisMonth(
+            month=current_month_start.strftime("%B"),
+            year=current_month_start.year,
+            total_amount=current_month_data.total_amount or Decimal('0'),
+            paid_amount=current_month_data.paid_amount or Decimal('0'),
+            pending_amount=current_month_data.pending_amount or Decimal('0'),
+            overdue_amount=current_month_data.overdue_amount or Decimal('0'),
+            count_total=current_month_data.count_total or 0,
+            count_paid=current_month_data.count_paid or 0,
+            count_pending=current_month_data.count_pending or 0,
+            count_overdue=current_month_data.count_overdue or 0
+        )
+        
+        # 2. ANÁLISE DOS PRÓXIMOS MESES
+        next_months = []
+        for i in range(1, months_ahead + 1):
+            month_start = current_month_start + relativedelta(months=i)
+            month_end = (month_start + relativedelta(months=1)) - timedelta(days=1)
+            
+            month_data = db.query(
+                func.sum(AccountsPayable.total_amount).label('total_amount'),
+                func.sum(case(
+                    (AccountsPayable.status == 'paid', AccountsPayable.paid_amount),
+                    else_=0
+                )).label('paid_amount'),
+                func.sum(case(
+                    (AccountsPayable.status == 'pending', AccountsPayable.total_amount - AccountsPayable.paid_amount),
+                    else_=0
+                )).label('pending_amount'),
+                func.count(AccountsPayable.id).label('count_total'),
+                func.sum(case(
+                    (AccountsPayable.status == 'paid', 1),
+                    else_=0
+                )).label('count_paid'),
+                func.sum(case(
+                    (AccountsPayable.status == 'pending', 1),
+                    else_=0
+                )).label('count_pending')
+            ).filter(
+                and_(
+                    AccountsPayable.due_date >= month_start,
+                    AccountsPayable.due_date <= month_end,
+                    *base_filters
+                )
+            ).first()
+            
+            next_months.append(PayableAnalysisMonth(
+                month=month_start.strftime("%B"),
+                year=month_start.year,
+                total_amount=month_data.total_amount or Decimal('0'),
+                paid_amount=month_data.paid_amount or Decimal('0'),
+                pending_amount=month_data.pending_amount or Decimal('0'),
+                overdue_amount=Decimal('0'),  # Próximos meses não têm vencidas ainda
+                count_total=month_data.count_total or 0,
+                count_paid=month_data.count_paid or 0,
+                count_pending=month_data.count_pending or 0,
+                count_overdue=0
+            ))
+        
+        # 3. ANÁLISE POR CATEGORIA
+        end_analysis_date = current_month_start + relativedelta(months=months_ahead)
+        
+        categories_data = db.query(
+            AccountsPayable.category_id,
+            PayableCategory.name.label('category_name'),
+            func.sum(AccountsPayable.total_amount).label('total_amount'),
+            func.count(AccountsPayable.id).label('count')
+        ).outerjoin(
+            PayableCategory, AccountsPayable.category_id == PayableCategory.id
+        ).filter(
+            and_(
+                AccountsPayable.due_date >= current_month_start,
+                AccountsPayable.due_date < end_analysis_date,
+                *base_filters
+            )
+        ).group_by(
+            AccountsPayable.category_id, PayableCategory.name
+        ).all()
+        
+        total_categories = sum(cat.total_amount or Decimal('0') for cat in categories_data)
+        
+        categories = []
+        for cat in categories_data:
+            amount = cat.total_amount or Decimal('0')
+            percentage = float((amount / total_categories) * 100) if total_categories > 0 else 0
+            categories.append(PayableAnalysisCategory(
+                category_id=cat.category_id,
+                category_name=cat.category_name or "Sem Categoria",
+                total_amount=amount,
+                percentage=round(percentage, 2),
+                count=cat.count or 0
+            ))
+        
+        # 4. ANÁLISE POR FORNECEDOR
+        suppliers_data = db.query(
+            AccountsPayable.supplier_id,
+            Supplier.name.label('supplier_name'),
+            func.sum(AccountsPayable.total_amount).label('total_amount'),
+            func.count(AccountsPayable.id).label('count')
+        ).join(
+            Supplier, AccountsPayable.supplier_id == Supplier.id
+        ).filter(
+            and_(
+                AccountsPayable.due_date >= current_month_start,
+                AccountsPayable.due_date < end_analysis_date,
+                *base_filters
+            )
+        ).group_by(
+            AccountsPayable.supplier_id, Supplier.name
+        ).all()
+        
+        total_suppliers = sum(sup.total_amount for sup in suppliers_data)
+        suppliers = []
+        for sup in suppliers_data:
+            percentage = float((sup.total_amount / total_suppliers) * 100) if total_suppliers > 0 else 0
+            suppliers.append(PayableAnalysisSupplier(
+                supplier_id=str(sup.supplier_id),
+                supplier_name=sup.supplier_name,
+                total_amount=sup.total_amount,
+                percentage=round(percentage, 2),
+                count=sup.count
+            ))
+        
+        # 5. PREVISÃO DE CAIXA (próximos 30 dias)
+        forecast_end = today + timedelta(days=30)
+        
+        forecast_data = db.query(AccountsPayable).options(
+            joinedload(AccountsPayable.supplier),
+            joinedload(AccountsPayable.category)
+        ).filter(
+            and_(
+                AccountsPayable.company_id == current_user.company_id,
+                AccountsPayable.status.in_(['pending']),
+                AccountsPayable.due_date >= today,
+                AccountsPayable.due_date <= forecast_end
+            )
+        ).order_by(AccountsPayable.due_date).all()
+        
+        forecast = []
+        for payable in forecast_data:
+            # Converter is_fixed_cost para boolean de forma segura
+            is_fixed_cost = False
+            if payable.is_fixed_cost:
+                if isinstance(payable.is_fixed_cost, str):
+                    is_fixed_cost = payable.is_fixed_cost.upper() in ['S', 'SIM', 'TRUE', '1', 'Y', 'YES']
+                elif isinstance(payable.is_fixed_cost, bool):
+                    is_fixed_cost = payable.is_fixed_cost
+                else:
+                    is_fixed_cost = bool(payable.is_fixed_cost)
+            
+            forecast.append(PayableAnalysisForecast(
+                date=payable.due_date,
+                amount=payable.total_amount - payable.paid_amount,
+                description=payable.description,
+                supplier_name=payable.supplier.name if payable.supplier else "Fornecedor não informado",
+                category_name=payable.category.name if payable.category else None,
+                is_fixed_cost=is_fixed_cost
+            ))
+        
+        # 6. RESUMO GERAL
+        summary = {
+            "total_analysis_period": current_month.total_amount + sum(m.total_amount for m in next_months),
+            "total_pending_period": current_month.pending_amount + sum(m.pending_amount for m in next_months),
+            "total_forecast_30_days": sum(f.amount for f in forecast),
+            "fixed_costs_percentage": 0,  # Será calculado se necessário
+            "top_category": max(categories, key=lambda x: x.total_amount).category_name if categories else None,
+            "top_supplier": max(suppliers, key=lambda x: x.total_amount).supplier_name if suppliers else None
+        }
+        
+        return PayableAnalysisResponse(
+            current_month=current_month,
+            next_months=next_months,
+            categories=sorted(categories, key=lambda x: x.total_amount, reverse=True),
+            suppliers=sorted(suppliers, key=lambda x: x.total_amount, reverse=True),
+            forecast=forecast,
+            summary=summary
+        )
+        
+    except Exception as e:
+        print(f"Erro na análise de contas a pagar: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Erro ao carregar análise: {str(e)}"
+        )
+
 @router.get("/{payable_id}", response_model=AccountsPayableResponse)
 def get_accounts_payable_detail(
     payable_id: int,
@@ -428,4 +755,5 @@ def get_accounts_payable_summary(
         paid_count=paid_count,
         by_status=by_status,
         by_month=by_month
-    ) 
+    )
+ 

@@ -67,12 +67,7 @@ const menuItems: MenuItem[] = [
         icon: Calculator,
         module: "accounts_payable",
       },
-      {
-        title: "Centro de Custos",
-        href: "/app/centro-custos",
-        icon: Building2,
-        module: "cost_center",
-      },
+
       {
         title: "Contas",
         href: "/app/contas",

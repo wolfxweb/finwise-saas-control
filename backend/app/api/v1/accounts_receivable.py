@@ -92,6 +92,23 @@ def create_accounts_receivable(
         )
         
         db.add(db_receivable)
+        db.flush()  # Para obter o ID antes do commit
+        
+        # Se a conta foi criada como paga e há uma conta bancária associada, atualizar o saldo
+        if receivable.status == ReceivableStatus.PAID and receivable.account_id and receivable.paid_amount:
+            account = db.query(Account).filter(
+                and_(
+                    Account.id == receivable.account_id,
+                    Account.company_id == current_user.company_id
+                )
+            ).first()
+            
+            if account:
+                # Somar o valor pago ao saldo da conta bancária
+                account.balance += Decimal(str(receivable.paid_amount))
+                account.available_balance = account.balance + account.limit
+                print(f"💰 Saldo da conta {account.account_number} atualizado: +R$ {receivable.paid_amount} (Novo saldo: R$ {account.balance})")
+        
         db.commit()
         db.refresh(db_receivable)
         
@@ -336,6 +353,11 @@ def update_accounts_receivable(
                 detail="Categoria não encontrada"
             )
     
+    # Guardar valores anteriores para comparação
+    old_status = receivable.status
+    old_paid_amount = receivable.paid_amount or 0
+    old_account_id = receivable.account_id
+    
     # Atualizar campos
     update_data = receivable_update.dict(exclude_unset=True)
     for field, value in update_data.items():
@@ -355,6 +377,32 @@ def update_accounts_receivable(
     # Se o status foi enviado explicitamente, usar ele
     if receivable_update.status is not None:
         receivable.status = receivable_update.status
+    
+    # Atualizar saldo da conta bancária se necessário
+    current_account_id = receivable.account_id
+    current_paid_amount = receivable.paid_amount or 0
+    current_status = receivable.status
+    
+    # Se a conta mudou de status para PAID ou o valor pago aumentou, atualizar saldo
+    if current_account_id and current_status == ReceivableStatus.PAID:
+        # Se mudou de não pago para pago, ou se o valor pago aumentou
+        if (old_status != ReceivableStatus.PAID and current_status == ReceivableStatus.PAID) or \
+           (old_status == ReceivableStatus.PAID and current_paid_amount > old_paid_amount):
+            
+            account = db.query(Account).filter(
+                and_(
+                    Account.id == current_account_id,
+                    Account.company_id == current_user.company_id
+                )
+            ).first()
+            
+            if account:
+                # Calcular diferença para adicionar ao saldo
+                amount_to_add = current_paid_amount - (old_paid_amount if old_status == ReceivableStatus.PAID else 0)
+                if amount_to_add > 0:
+                    account.balance += Decimal(str(amount_to_add))
+                    account.available_balance = account.balance + account.limit
+                    print(f"💰 Saldo da conta {account.account_number} atualizado: +R$ {amount_to_add} (Novo saldo: R$ {account.balance})")
     
     db.commit()
     db.refresh(receivable)

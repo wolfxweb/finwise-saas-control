@@ -19,7 +19,7 @@ class PayableCategory(Base):
     updated_at = Column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
 
     # Relacionamentos
-    company = relationship("Company", back_populates="payable_categories")
+    # company = relationship("Company", back_populates="payable_categories")  # Comentado temporariamente
     parent = relationship("PayableCategory", remote_side=[id], backref="children")
     accounts_payable = relationship("AccountsPayable", back_populates="category")
 

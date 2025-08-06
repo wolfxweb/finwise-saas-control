@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectGroup, SelectLabel } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -210,6 +210,30 @@ export default function FluxoCaixa() {
     }
   };
 
+  const loadPayablesForContasTab = async () => {
+    try {
+      const params = new URLSearchParams({
+        page: currentPage.toString(),
+        limit: pageSize.toString(),
+        movement_type: 'saida' // Filtrar apenas saídas (contas a pagar)
+      });
+      
+      if (searchTerm) params.append('search', searchTerm);
+      if (statusFilter) params.append('status_filter', statusFilter);
+      if (customerSupplierFilter) params.append('customer_supplier_id', customerSupplierFilter);
+      if (categoryFilter) params.append('category_id', categoryFilter);
+      if (accountFilter) params.append('account_id', accountFilter);
+      if (startDate) params.append('start_date', format(startDate, 'yyyy-MM-dd'));
+      if (endDate) params.append('end_date', format(endDate, 'yyyy-MM-dd'));
+      
+      const response = await api.get(`/api/v1/cash-flow/movements?${params}`);
+      setMovementsPaginated(response.data);
+    } catch (error) {
+      console.error('Erro ao carregar contas a pagar:', error);
+      toast.error('Erro ao carregar contas a pagar');
+    }
+  };
+
   const loadCategoriesSummary = async () => {
     try {
       const params = new URLSearchParams();
@@ -234,10 +258,18 @@ export default function FluxoCaixa() {
 
   const loadFilterOptions = async () => {
     try {
+      console.log('🔄 Carregando opções de filtro...');
       const response = await api.get('/api/v1/cash-flow/filter-options');
+      console.log('✅ Opções de filtro carregadas:', response.data);
+      console.log('📊 Contas encontradas:', response.data.accounts?.length || 0);
+      if (response.data.accounts) {
+        response.data.accounts.forEach((account: any) => {
+          console.log(`🏦 Conta: ${account.name} (ID: ${account.id})`);
+        });
+      }
       setFilterOptions(response.data);
     } catch (error) {
-      console.error('Erro ao carregar opções de filtro:', error);
+      console.error('❌ Erro ao carregar opções de filtro:', error);
       toast.error('Erro ao carregar opções de filtro');
     }
   };
@@ -273,34 +305,58 @@ export default function FluxoCaixa() {
 
   const loadPayablesByMonth = async () => {
     try {
-      // Gerar dados para 12 meses (6 anteriores + atual + 5 próximos)
+      // Gerar dados para 12 meses (2 anteriores + atual + 9 próximos) para mês atual ficar na 3ª posição
       const currentDate = new Date();
       const months = [];
       
-      // Gerar os meses
-      for (let i = -6; i <= 5; i++) {
+      console.log('🔍 Carregando dados do gráfico por mês...');
+      console.log('📅 Mês atual:', format(currentDate, 'MMM/yy', { locale: ptBR }));
+      
+      // Primeiro, vamos buscar todos os dados sem filtro de data para debug
+      try {
+        const allDataResponse = await api.get(`/api/v1/cash-flow/movements?movement_type=saida&limit=100`);
+        console.log('📋 Todas as contas a pagar encontradas:', allDataResponse.data.movements?.length || 0);
+        allDataResponse.data.movements?.forEach((movement: any) => {
+          console.log(`📝 Conta: ${movement.description} - Vencimento: ${movement.due_date} - Valor: R$ ${movement.amount}`);
+        });
+      } catch (error) {
+        console.error('Erro ao buscar todos os dados:', error);
+      }
+      
+      // Gerar os meses (2 anteriores + atual + 9 próximos = 12 meses total)
+      for (let i = -2; i <= 9; i++) {
         const monthDate = new Date(currentDate.getFullYear(), currentDate.getMonth() + i, 1);
         const startDate = format(monthDate, 'yyyy-MM-dd');
         const endDate = format(new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 0), 'yyyy-MM-dd');
+        
+        console.log(`🗓️ Buscando dados para ${format(monthDate, 'MMM/yy')} (${startDate} a ${endDate})`);
         
         // Buscar dados do mês
         const params = new URLSearchParams({
           start_date: startDate,
           end_date: endDate,
           movement_type: 'saida',
-          limit: '1000' // Pegar todos os registros do mês
+          limit: '100'
         });
         
         try {
           const response = await api.get(`/api/v1/cash-flow/movements?${params}`);
-          const total = response.data.movements.reduce((sum: number, movement: any) => {
-            return sum + (movement.total_amount || 0);
-          }, 0);
+          const movements = response.data.movements || [];
+          
+          let total = 0;
+          movements.forEach((movement: any) => {
+            // Garantir que o valor seja numérico
+            const amount = parseFloat(movement.amount) || 0;
+            total += amount;
+            console.log(`📊 Mês ${format(monthDate, 'MMM/yy')}: ${movement.description} (${movement.due_date}) = R$ ${amount.toFixed(2)}`);
+          });
+          
+          console.log(`📈 Total do mês ${format(monthDate, 'MMM/yy')}: R$ ${total.toFixed(2)} (${movements.length} movimentações)`);
           
           months.push({
             month: format(monthDate, 'MMM/yy', { locale: ptBR }),
             total: total,
-            isCurrentMonth: i === 0
+            isCurrentMonth: i === 0  // i === 0 significa mês atual (terceira posição)
           });
         } catch (error) {
           console.error(`Erro ao carregar dados do mês ${format(monthDate, 'MM/yyyy')}:`, error);
@@ -312,6 +368,8 @@ export default function FluxoCaixa() {
         }
       }
       
+      console.log('📊 Dados finais do gráfico:', months);
+      console.log('🎯 Posição do mês atual:', months.findIndex(m => m.isCurrentMonth) + 1);
       setPayablesByMonth(months);
     } catch (error) {
       console.error('Erro ao carregar contas a pagar por mês:', error);
@@ -344,8 +402,16 @@ export default function FluxoCaixa() {
   useEffect(() => {
     if (!loading && activeTab === "contas") {
       loadPayablesByMonth();
+      loadPayablesForContasTab();
+      loadFilterOptions(); // Adicionar carregamento das opções de filtro
     }
   }, [activeTab]);
+
+  useEffect(() => {
+    if (!loading && activeTab === "contas") {
+      loadPayablesForContasTab();
+    }
+  }, [activeTab, currentPage, pageSize, searchTerm, statusFilter, customerSupplierFilter, categoryFilter, accountFilter, startDate, endDate]);
 
   const handleViewMovement = (movement: CashFlowMovement) => {
     setSelectedMovement(movement);
@@ -690,16 +756,47 @@ export default function FluxoCaixa() {
                   </Select>
 
                   <Select value={accountFilter} onValueChange={setAccountFilter}>
-                    <SelectTrigger className="w-48">
-                      <SelectValue placeholder="Conta" />
+                    <SelectTrigger className="w-40">
+                      <SelectValue placeholder="Conta/Cartão" />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="">Todas</SelectItem>
-                      {filterOptions?.accounts.map((account) => (
-                        <SelectItem key={account.id} value={account.id.toString()}>
-                          {account.name}
-                        </SelectItem>
-                      ))}
+                      
+                      {/* Contas Bancárias */}
+                      {filterOptions?.accounts.filter(account => 
+                        !account.name.includes('💳')
+                      ).length > 0 && (
+                        <>
+                          <SelectGroup>
+                            <SelectLabel>Contas Bancárias</SelectLabel>
+                            {filterOptions.accounts
+                              .filter(account => !account.name.includes('💳'))
+                              .map((account) => (
+                                <SelectItem key={account.id} value={account.id.toString()}>
+                                  {account.name}
+                                </SelectItem>
+                              ))}
+                          </SelectGroup>
+                        </>
+                      )}
+                      
+                      {/* Cartões */}
+                      {filterOptions?.accounts.filter(account => 
+                        account.name.includes('💳')
+                      ).length > 0 && (
+                        <>
+                          <SelectGroup>
+                            <SelectLabel>Cartões</SelectLabel>
+                            {filterOptions.accounts
+                              .filter(account => account.name.includes('💳'))
+                              .map((account) => (
+                                <SelectItem key={account.id} value={account.id.toString()}>
+                                  {account.name}
+                                </SelectItem>
+                              ))}
+                          </SelectGroup>
+                        </>
+                      )}
                     </SelectContent>
                   </Select>
 
@@ -1287,11 +1384,42 @@ export default function FluxoCaixa() {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="">Todas</SelectItem>
-                        {filterOptions?.accounts.map((account) => (
-                          <SelectItem key={account.id} value={account.id.toString()}>
-                            {account.name}
-                          </SelectItem>
-                        ))}
+                        
+                        {/* Contas Bancárias */}
+                        {filterOptions?.accounts.filter(account => 
+                          !account.name.includes('💳')
+                        ).length > 0 && (
+                          <>
+                            <SelectGroup>
+                              <SelectLabel>Contas Bancárias</SelectLabel>
+                              {filterOptions.accounts
+                                .filter(account => !account.name.includes('💳'))
+                                .map((account) => (
+                                  <SelectItem key={account.id} value={account.id.toString()}>
+                                    {account.name}
+                                  </SelectItem>
+                                ))}
+                            </SelectGroup>
+                          </>
+                        )}
+                        
+                        {/* Cartões */}
+                        {filterOptions?.accounts.filter(account => 
+                          account.name.includes('💳')
+                        ).length > 0 && (
+                          <>
+                            <SelectGroup>
+                              <SelectLabel>Cartões</SelectLabel>
+                              {filterOptions.accounts
+                                .filter(account => account.name.includes('💳'))
+                                .map((account) => (
+                                  <SelectItem key={account.id} value={account.id.toString()}>
+                                    {account.name}
+                                  </SelectItem>
+                                ))}
+                            </SelectGroup>
+                          </>
+                        )}
                       </SelectContent>
                     </Select>
                     <Popover>
@@ -1344,7 +1472,7 @@ export default function FluxoCaixa() {
               <Card>
                 <CardHeader>
                   <CardTitle>Total a Pagar por Mês</CardTitle>
-                  <CardDescription>Últimos 6 meses, mês atual e próximos 5 meses</CardDescription>
+                  <CardDescription>2 meses anteriores, mês atual e próximos 9 meses</CardDescription>
                 </CardHeader>
                 <CardContent>
                   {payablesByMonth && payablesByMonth.length > 0 ? (
@@ -1413,8 +1541,7 @@ export default function FluxoCaixa() {
                       </TableHeader>
                       <TableBody>
                         {movementsPaginated?.movements
-                          .filter(movement => movement.movement_type === 'saida')
-                          .map((movement) => (
+                          ?.map((movement) => (
                             <TableRow key={movement.id}>
                               <TableCell className="font-medium">
                                 {movement.description}
@@ -1431,7 +1558,7 @@ export default function FluxoCaixa() {
                                 {movement.due_date ? format(new Date(movement.due_date), "dd/MM/yyyy", { locale: ptBR }) : 'N/A'}
                               </TableCell>
                               <TableCell className="text-right font-medium">
-                                {formatCurrency(movement.total_amount)}
+                                {formatCurrency(movement.amount || 0)}
                               </TableCell>
                               <TableCell>
                                 <Badge 

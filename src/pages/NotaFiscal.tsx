@@ -763,8 +763,8 @@ export default function NotaFiscal() {
               console.warn('⚠️ Nota fiscal não importada:', response.message);
               
               // Se for erro de duplicata, mostrar como aviso
-              if (response.message && response.message.includes('Já existe uma nota fiscal')) {
-                toast.warning(`Nota fiscal ${file.name} já existe no sistema`);
+              if (response.message && (response.message.includes('Já existe uma nota fiscal') || response.message.includes('já foi importada anteriormente'))) {
+                toast.warning(`Nota fiscal ${file.name} já foi importada anteriormente`);
               } else {
                 const errorMessage = `Erro ao importar ${file.name}: ${response.message}`;
                 setImportErrors(prev => [...prev, errorMessage]);
@@ -831,8 +831,8 @@ export default function NotaFiscal() {
                   console.warn('⚠️ Nota fiscal não importada (ZIP):', response.message);
                   
                   // Se for erro de duplicata, mostrar como aviso
-                  if (response.message && response.message.includes('Já existe uma nota fiscal')) {
-                    toast.warning(`Nota fiscal ${numeroNota} já existe no sistema`);
+                  if (response.message && (response.message.includes('Já existe uma nota fiscal') || response.message.includes('já foi importada anteriormente'))) {
+                    toast.warning(`Nota fiscal ${numeroNota} já foi importada anteriormente`);
                   } else {
                     const errorMessage = `Erro ao importar ${numeroNota}: ${response.message}`;
                     setImportErrors(prev => [...prev, errorMessage]);
@@ -4383,9 +4383,9 @@ export default function NotaFiscal() {
                 const exists = await validateNotaFiscalExists(numero, serie, emitenteCnpj, emitenteNome);
                 if (exists) {
                   setValidationErrors({
-                    numero: `Já existe uma nota fiscal com o número ${numero} série ${serie} do emitente ${emitenteNome} (${emitenteCnpj})`
+                    numero: `Nota fiscal Nº ${numero} série ${serie} já foi importada anteriormente. Emitente: ${emitenteNome} (${emitenteCnpj})`
                   });
-                  toast.error(`Já existe uma nota fiscal com o número ${numero} série ${serie} do emitente ${emitenteNome} (${emitenteCnpj})`);
+                  toast.error(`Nota fiscal Nº ${numero} série ${serie} já foi importada anteriormente`);
                   setIsSubmitting(false);
                   return;
                 }

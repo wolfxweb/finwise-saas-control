@@ -299,7 +299,7 @@ class NotaFiscalService:
                 
                 if import_data.handle_duplicates == "skip":
                     print(f"DEBUG: Pulando nota fiscal duplicada")
-                    raise ValueError(f"Já existe uma nota fiscal com o número {parsed_data['numero']} série {parsed_data['serie']} do emitente {parsed_data['emitente_nome']} ({parsed_data['emitente_cnpj']})")
+                    raise ValueError(f"Nota fiscal Nº {parsed_data['numero']} série {parsed_data['serie']} já foi importada anteriormente. Emitente: {parsed_data['emitente_nome']} ({parsed_data['emitente_cnpj']})")
                 elif import_data.handle_duplicates == "overwrite":
                     # Deletar a nota fiscal existente para sobrescrever
                     print(f"DEBUG: Sobrescrevendo nota fiscal existente: {parsed_data['numero']} série {parsed_data['serie']} emitente {parsed_data['emitente_nome']}")

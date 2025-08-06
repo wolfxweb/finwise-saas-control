@@ -684,7 +684,13 @@ def get_filter_options(
             categories_payable=[{"id": c.id, "name": c.name} for c in categories_payable],
             accounts=[{
                 "id": a.id, 
-                "name": f"{a.bank.name if a.bank else 'Banco'} - {a.account_number}" if a.account_number else a.bank.name if a.bank else "Conta"
+                "name": (
+                    f"💳 {a.bank.name if a.bank else 'Banco'} - Final {a.account_number[-4:]} ({a.holder_name})" 
+                    if a.account_type in ['credit', 'debit'] and a.account_number and len(a.account_number) >= 4
+                    else f"{a.bank.name if a.bank else 'Banco'} - {a.account_number} ({a.holder_name})" 
+                    if a.account_number 
+                    else a.bank.name if a.bank else "Conta"
+                )
             } for a in accounts]
         )
         
