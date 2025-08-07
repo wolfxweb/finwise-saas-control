@@ -71,14 +71,14 @@ interface AccountsPayable {
   category_id?: number;
   payable_type: "cash" | "installment";
   status: "pending" | "paid" | "overdue" | "cancelled";
-  total_amount: number;
-  paid_amount: number;
+  total_amount: number | string; // API pode retornar como string
+  paid_amount: number | string; // API pode retornar como string
   entry_date: string;
   due_date: string;
   payment_date?: string;
   installment_number: number;
   total_installments: number;
-  installment_amount?: number;
+  installment_amount?: number | string; // API pode retornar como string
   notes?: string;
   reference?: string;
   is_fixed_cost?: boolean;
@@ -164,12 +164,13 @@ export default function ContasPagar() {
   
   // Função para formatar valores em Real Brasileiro
   const formatCurrency = (value: number) => {
+    const numValue = Number(value) || 0;
     return new Intl.NumberFormat('pt-BR', {
       style: 'currency',
       currency: 'BRL',
       minimumFractionDigits: 2,
       maximumFractionDigits: 2
-    }).format(value);
+    }).format(numValue);
   };
   const [payables, setPayables] = useState<AccountsPayable[]>([]);
   const [summary, setSummary] = useState<AccountsPayableSummary | null>(null);
@@ -179,6 +180,7 @@ export default function ContasPagar() {
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [filterStatus, setFilterStatus] = useState<string>("all");
+  const [filterMonth, setFilterMonth] = useState<string>(new Date().toISOString().slice(0, 7)); // Formato YYYY-MM para mês atual
   
   // Estados para análise
   const [analysisData, setAnalysisData] = useState<PayableAnalysisResponse | null>(null);
@@ -204,7 +206,7 @@ export default function ContasPagar() {
     tipo: '',
     reference: ''
   });
-  const [useFilteredStats, setUseFilteredStats] = useState<boolean>(false);
+
   
   // Estados para paginação e ordenação
   const [currentPage, setCurrentPage] = useState(1);
@@ -306,7 +308,7 @@ export default function ContasPagar() {
   // Resetar página quando filtros mudarem
   useEffect(() => {
     resetPage();
-  }, [searchTerm, filterStatus]);
+  }, [searchTerm, filterStatus, filterMonth]);
 
   // Atualizar dados de relatório quando payables ou filtros mudarem
   useEffect(() => {
@@ -740,10 +742,29 @@ export default function ContasPagar() {
   const calculateFilteredStats = () => {
     const filteredData = applyFilters(payables);
     
-    const total_payable = filteredData.reduce((sum, payable) => sum + payable.total_amount, 0);
-    const total_paid = filteredData.reduce((sum, payable) => sum + payable.paid_amount, 0);
-      const total_overdue = filteredData.filter(payable => payable.is_overdue).reduce((sum, payable) => sum + getRemainingAmount(payable), 0);
-  const total_pending = filteredData.filter(payable => payable.status === 'pending').reduce((sum, payable) => sum + getRemainingAmount(payable), 0);
+    const total_payable = filteredData.reduce((sum, payable) => {
+      const amount = Number(payable.total_amount) || 0;
+      return sum + amount;
+    }, 0);
+    
+    const total_paid = filteredData.reduce((sum, payable) => {
+      const amount = Number(payable.paid_amount) || 0;
+      return sum + amount;
+    }, 0);
+    
+    const total_overdue = filteredData.filter(payable => payable.is_overdue).reduce((sum, payable) => {
+      const remaining = getRemainingAmount(payable);
+      const amount = Number(remaining) || 0;
+      return sum + amount;
+    }, 0);
+    
+    const total_pending = filteredData.filter(payable => payable.status === 'pending').reduce((sum, payable) => {
+      const remaining = getRemainingAmount(payable);
+      const amount = Number(remaining) || 0;
+      return sum + amount;
+    }, 0);
+    
+
     
     return {
       total_payable,
@@ -772,20 +793,24 @@ export default function ContasPagar() {
       reference: ''
     });
     setSearchTerm('');
+    setFilterStatus('all');
+    setFilterMonth(new Date().toISOString().slice(0, 7)); // Voltar para mês atual
     setCurrentPage(1);
-    setUseFilteredStats(false);
   };
 
   // Função para aplicar filtros
   const handleApplyFilters = () => {
     setCurrentPage(1);
     setIsFilterDialogOpen(false);
-    setUseFilteredStats(true);
   };
 
   // Função para verificar se há filtros ativos
   const hasActiveFilters = () => {
-    return Object.values(filters).some(value => value !== '') || searchTerm !== '';
+    const currentMonth = new Date().toISOString().slice(0, 7);
+    return Object.values(filters).some(value => value !== '') || 
+           searchTerm !== '' || 
+           filterStatus !== 'all' || 
+           filterMonth !== currentMonth;
   };
 
   const aplicarFiltrosRelatorio = (dados: any[]) => {
@@ -819,12 +844,12 @@ export default function ContasPagar() {
       }
       
       // Filtro por valor mínimo
-      if (filtrosRelatorio.valorMin && payable.total_amount < parseFloat(filtrosRelatorio.valorMin)) {
+      if (filtrosRelatorio.valorMin && (Number(payable.total_amount) || 0) < parseFloat(filtrosRelatorio.valorMin)) {
         return false;
       }
       
       // Filtro por valor máximo
-      if (filtrosRelatorio.valorMax && payable.total_amount > parseFloat(filtrosRelatorio.valorMax)) {
+      if (filtrosRelatorio.valorMax && (Number(payable.total_amount) || 0) > parseFloat(filtrosRelatorio.valorMax)) {
         return false;
       }
       
@@ -887,7 +912,7 @@ export default function ContasPagar() {
     }
     
     console.log("🔍 Aplicando filtros em", data.length, "registros");
-    console.log("🔍 Filtros ativos:", { searchTerm, filterStatus, filters });
+    console.log("🔍 Filtros ativos:", { searchTerm, filterStatus, filterMonth, filters });
     
     const filteredData = data.filter(payable => {
       // Filtro por termo de busca
@@ -912,6 +937,18 @@ export default function ContasPagar() {
         return false;
       }
 
+      // Filtro por mês de vencimento
+      if (filterMonth) {
+        const dueDate = new Date(payable.due_date);
+        const filterYear = parseInt(filterMonth.split('-')[0]);
+        const filterMonthNum = parseInt(filterMonth.split('-')[1]);
+        
+        if (dueDate.getFullYear() !== filterYear || (dueDate.getMonth() + 1) !== filterMonthNum) {
+          console.log("❌ Filtrado por mês:", payable.description, "vencimento:", payable.due_date, "filtro:", filterMonth);
+          return false;
+        }
+      }
+
       // Filtros avançados
       if (filters.status && payable.status !== filters.status) {
         console.log("❌ Filtrado por status avançado:", payable.description);
@@ -933,12 +970,12 @@ export default function ContasPagar() {
         return false;
       }
 
-      if (filters.valorMin && payable.total_amount < parseFloat(filters.valorMin)) {
+      if (filters.valorMin && (Number(payable.total_amount) || 0) < parseFloat(filters.valorMin)) {
         console.log("❌ Filtrado por valor mínimo:", payable.description);
         return false;
       }
 
-      if (filters.valorMax && payable.total_amount > parseFloat(filters.valorMax)) {
+      if (filters.valorMax && (Number(payable.total_amount) || 0) > parseFloat(filters.valorMax)) {
         console.log("❌ Filtrado por valor máximo:", payable.description);
         return false;
       }
@@ -1021,17 +1058,17 @@ export default function ContasPagar() {
       const existingMonth = acc.find(item => item.month === month);
       
       if (existingMonth) {
-        existingMonth.total += payable.total_amount;
+        existingMonth.total += Number(payable.total_amount) || 0;
         if (payable.status === 'paid') {
-          existingMonth.paid += payable.paid_amount;
+          existingMonth.paid += Number(payable.paid_amount) || 0;
         } else if (payable.status === 'pending') {
           existingMonth.pending += getRemainingAmount(payable);
         }
       } else {
         acc.push({
           month,
-          total: payable.total_amount,
-          paid: payable.status === 'paid' ? payable.paid_amount : 0,
+          total: Number(payable.total_amount) || 0,
+          paid: payable.status === 'paid' ? Number(payable.paid_amount) || 0 : 0,
           pending: payable.status === 'pending' ? getRemainingAmount(payable) : 0
         });
       }
@@ -1054,7 +1091,7 @@ export default function ContasPagar() {
 
     // Top fornecedores
     const supplierTotals = filteredData.reduce((acc, payable) => {
-              acc[getSupplierName(payable.supplier_id)] = (acc[getSupplierName(payable.supplier_id)] || 0) + payable.total_amount;
+              acc[getSupplierName(payable.supplier_id)] = (acc[getSupplierName(payable.supplier_id)] || 0) + (Number(payable.total_amount) || 0);
       return acc;
     }, {} as any);
 
@@ -1070,13 +1107,13 @@ export default function ContasPagar() {
       
       if (existingMonth) {
         if (existingMonth[getSupplierName(payable.supplier_id)]) {
-          existingMonth[getSupplierName(payable.supplier_id)] += payable.total_amount;
+          existingMonth[getSupplierName(payable.supplier_id)] += Number(payable.total_amount) || 0;
         } else {
-          existingMonth[getSupplierName(payable.supplier_id)] = payable.total_amount;
+          existingMonth[getSupplierName(payable.supplier_id)] = Number(payable.total_amount) || 0;
         }
       } else {
         const newMonth: any = { month };
-        newMonth[getSupplierName(payable.supplier_id)] = payable.total_amount;
+        newMonth[getSupplierName(payable.supplier_id)] = Number(payable.total_amount) || 0;
         acc.push(newMonth);
       }
       
@@ -1241,7 +1278,9 @@ export default function ContasPagar() {
 
   // Funções auxiliares
   const getRemainingAmount = (payable: AccountsPayable) => {
-    return payable.total_amount - payable.paid_amount;
+    const totalAmount = Number(payable.total_amount) || 0;
+    const paidAmount = Number(payable.paid_amount) || 0;
+    return totalAmount - paidAmount;
   };
 
   const getSupplierName = (supplierId: string) => {
@@ -1301,10 +1340,10 @@ export default function ContasPagar() {
                 <DollarSign className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">
-                  {formatCurrency(useFilteredStats ? calculateFilteredStats().total_payable : getSummaryValue('total_payable', 0))}
+                <div className="text-2xl font-bold text-primary">
+                  {formatCurrency(calculateFilteredStats().total_payable)}
                 </div>
-                {useFilteredStats && (
+                {hasActiveFilters() && (
                   <Badge variant="secondary" className="mt-1">Filtrado</Badge>
                 )}
               </CardContent>
@@ -1316,10 +1355,10 @@ export default function ContasPagar() {
                 <DollarSign className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">
-                  {formatCurrency(useFilteredStats ? calculateFilteredStats().total_paid : getSummaryValue('total_paid', 0))}
+                <div className="text-2xl font-bold text-green-600">
+                  {formatCurrency(calculateFilteredStats().total_paid)}
                 </div>
-                {useFilteredStats && (
+                {hasActiveFilters() && (
                   <Badge variant="secondary" className="mt-1">Filtrado</Badge>
                 )}
               </CardContent>
@@ -1331,10 +1370,10 @@ export default function ContasPagar() {
                 <AlertCircle className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">
-                  {formatCurrency(useFilteredStats ? calculateFilteredStats().total_overdue : getSummaryValue('total_overdue', 0))}
+                <div className="text-2xl font-bold text-destructive">
+                  {formatCurrency(calculateFilteredStats().total_overdue)}
                 </div>
-                {useFilteredStats && (
+                {hasActiveFilters() && (
                   <Badge variant="secondary" className="mt-1">Filtrado</Badge>
                 )}
               </CardContent>
@@ -1346,10 +1385,10 @@ export default function ContasPagar() {
                 <Clock className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">
-                  {formatCurrency(useFilteredStats ? calculateFilteredStats().total_pending : getSummaryValue('total_pending', 0))}
+                <div className="text-2xl font-bold text-warning">
+                  {formatCurrency(calculateFilteredStats().total_pending)}
                 </div>
-                {useFilteredStats && (
+                {hasActiveFilters() && (
                   <Badge variant="secondary" className="mt-1">Filtrado</Badge>
                 )}
               </CardContent>
@@ -1386,6 +1425,15 @@ export default function ContasPagar() {
                     <SelectItem value="cancelled">Cancelado</SelectItem>
                   </SelectContent>
                 </Select>
+                <div className="flex flex-col gap-1">
+                  <Input
+                    id="filter-month"
+                    type="month"
+                    value={filterMonth}
+                    onChange={(e) => setFilterMonth(e.target.value)}
+                    className="w-full md:w-[180px]"
+                  />
+                </div>
                 <Button variant="outline" onClick={() => setIsFilterDialogOpen(true)}>
                   <Filter className="h-4 w-4 mr-2" />
                   Filtros Avançados

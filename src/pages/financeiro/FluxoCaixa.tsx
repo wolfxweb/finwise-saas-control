@@ -287,8 +287,8 @@ export default function FluxoCaixa() {
         loadPayablesByMonth()
       ]);
       
-      // Carregar resumo
-      const summaryResponse = await api.get('/api/v1/cash-flow/summary');
+      // Carregar resumo (apenas mês atual para análise focada)
+      const summaryResponse = await api.get('/api/v1/cash-flow/summary?period=current_month');
       setSummary(summaryResponse.data);
       
       // Carregar previsão

@@ -9,7 +9,7 @@ from decimal import Decimal
 from app.core.database import get_db
 from ..v1.auth import get_current_user
 from app.models.accounts_receivable import AccountsReceivable, ReceivableStatus
-from app.models.accounts_payable import AccountsPayable, PayableStatus
+from app.models.accounts_payable import AccountsPayable, PayableStatus, PayableType
 from app.models.customer import Customer
 from app.models.supplier import Supplier
 from app.models.category import Category
@@ -313,14 +313,32 @@ def get_cash_flow_movements(
 
 @router.get("/summary", response_model=CashFlowSummary)
 def get_cash_flow_summary(
+    start_date: Optional[date] = None,
+    end_date: Optional[date] = None,
+    period: Optional[str] = Query("current_month"),  # "current_month", "all"
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """Obter resumo do fluxo de caixa"""
     
     try:
-        # Calcular totais de entradas (contas a receber)
-        receivables_summary = db.query(
+        # Definir período padrão se não especificado
+        if not start_date or not end_date:
+            today = date.today()
+            if period == "current_month":
+                start_date = today.replace(day=1)
+                # Último dia do mês atual
+                if today.month == 12:
+                    end_date = today.replace(year=today.year + 1, month=1, day=1) - timedelta(days=1)
+                else:
+                    end_date = today.replace(month=today.month + 1, day=1) - timedelta(days=1)
+            elif period == "all":
+                # Sem filtro de data para compatibilidade
+                start_date = None
+                end_date = None
+        
+        # Query base para contas a receber
+        receivables_query = db.query(
             func.sum(AccountsReceivable.total_amount).label('total'),
             func.sum(case(
                 (AccountsReceivable.status == ReceivableStatus.PENDING, AccountsReceivable.total_amount),
@@ -335,10 +353,21 @@ def get_cash_flow_summary(
             )).label('overdue')
         ).filter(
             AccountsReceivable.company_id == current_user.company_id
-        ).first()
+        )
         
-        # Calcular totais de saídas (contas a pagar)
-        payables_summary = db.query(
+        # Aplicar filtro de data para receivables se especificado
+        if start_date and end_date:
+            receivables_query = receivables_query.filter(
+                and_(
+                    AccountsReceivable.due_date >= start_date,
+                    AccountsReceivable.due_date <= end_date
+                )
+            )
+        
+        receivables_summary = receivables_query.first()
+        
+        # Query base para contas a pagar
+        payables_query = db.query(
             func.sum(AccountsPayable.total_amount).label('total'),
             func.sum(case(
                 (AccountsPayable.status == PayableStatus.PENDING, AccountsPayable.total_amount),
@@ -353,7 +382,18 @@ def get_cash_flow_summary(
             )).label('overdue')
         ).filter(
             AccountsPayable.company_id == current_user.company_id
-        ).first()
+        )
+        
+        # Aplicar filtro de data para payables se especificado
+        if start_date and end_date:
+            payables_query = payables_query.filter(
+                and_(
+                    AccountsPayable.due_date >= start_date,
+                    AccountsPayable.due_date <= end_date
+                )
+            )
+        
+        payables_summary = payables_query.first()
         
         total_entries = receivables_summary.total or Decimal('0')
         total_exits = payables_summary.total or Decimal('0')
@@ -935,3 +975,5 @@ def get_dre(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Erro ao gerar DRE: {str(e)}"
         ) 
+
+ 
