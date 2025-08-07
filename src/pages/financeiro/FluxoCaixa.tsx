@@ -158,10 +158,12 @@ export default function FluxoCaixa() {
 
   // Filtros específicos da aba categorias
   const [categoryTypeFilter, setCategoryTypeFilter] = useState<string>("");
-  const [periodFilter, setPeriodFilter] = useState<string>("current_month");
 
   // Filtros específicos do DRE
-  const [drePeriodFilter, setDrePeriodFilter] = useState<string>("current_month");
+  // (removido drePeriodFilter - agora usando filterMonth)
+  
+  // Filtro por mês
+  const [filterMonth, setFilterMonth] = useState<string>(new Date().toISOString().slice(0, 7));
 
   // Cores para gráficos
   const COLORS = ['#8884d8', '#82ca9d', '#ffc658', '#ff7300', '#8dd1e1', '#d084d0', '#ffb347', '#67b7dc'];
@@ -170,12 +172,14 @@ export default function FluxoCaixa() {
     try {
       const params = new URLSearchParams();
       
-      // Se não há filtro customizado de data, usar período selecionado
-      if (!startDate && !endDate && drePeriodFilter) {
-        params.append('period', drePeriodFilter);
-      } else {
-        if (startDate) params.append('start_date', format(startDate, 'yyyy-MM-dd'));
-        if (endDate) params.append('end_date', format(endDate, 'yyyy-MM-dd'));
+      // Usar o filtro por mês
+      if (filterMonth) {
+        const year = parseInt(filterMonth.split('-')[0]);
+        const month = parseInt(filterMonth.split('-')[1]);
+        const startOfMonth = new Date(year, month - 1, 1);
+        const endOfMonth = new Date(year, month, 0);
+        params.append('start_date', format(startOfMonth, 'yyyy-MM-dd'));
+        params.append('end_date', format(endOfMonth, 'yyyy-MM-dd'));
       }
       
       const response = await api.get(`/api/v1/cash-flow/dre?${params}`);
@@ -202,6 +206,16 @@ export default function FluxoCaixa() {
       if (startDate) params.append('start_date', format(startDate, 'yyyy-MM-dd'));
       if (endDate) params.append('end_date', format(endDate, 'yyyy-MM-dd'));
       
+      // Filtro por mês - se não há datas customizadas, usar o mês selecionado
+      if (!startDate && !endDate && filterMonth) {
+        const year = parseInt(filterMonth.split('-')[0]);
+        const month = parseInt(filterMonth.split('-')[1]);
+        const startOfMonth = new Date(year, month - 1, 1);
+        const endOfMonth = new Date(year, month, 0);
+        params.append('start_date', format(startOfMonth, 'yyyy-MM-dd'));
+        params.append('end_date', format(endOfMonth, 'yyyy-MM-dd'));
+      }
+      
       const response = await api.get(`/api/v1/cash-flow/movements?${params}`);
       setMovementsPaginated(response.data);
     } catch (error) {
@@ -226,6 +240,16 @@ export default function FluxoCaixa() {
       if (startDate) params.append('start_date', format(startDate, 'yyyy-MM-dd'));
       if (endDate) params.append('end_date', format(endDate, 'yyyy-MM-dd'));
       
+      // Filtro por mês - se não há datas customizadas, usar o mês selecionado
+      if (!startDate && !endDate && filterMonth) {
+        const year = parseInt(filterMonth.split('-')[0]);
+        const month = parseInt(filterMonth.split('-')[1]);
+        const startOfMonth = new Date(year, month - 1, 1);
+        const endOfMonth = new Date(year, month, 0);
+        params.append('start_date', format(startOfMonth, 'yyyy-MM-dd'));
+        params.append('end_date', format(endOfMonth, 'yyyy-MM-dd'));
+      }
+      
       const response = await api.get(`/api/v1/cash-flow/movements?${params}`);
       setMovementsPaginated(response.data);
     } catch (error) {
@@ -238,12 +262,14 @@ export default function FluxoCaixa() {
     try {
       const params = new URLSearchParams();
       
-      // Se não há filtro customizado de data, usar período selecionado
-      if (!startDate && !endDate && periodFilter) {
-        params.append('period', periodFilter);
-      } else {
-        if (startDate) params.append('start_date', format(startDate, 'yyyy-MM-dd'));
-        if (endDate) params.append('end_date', format(endDate, 'yyyy-MM-dd'));
+      // Usar o filtro por mês
+      if (filterMonth) {
+        const year = parseInt(filterMonth.split('-')[0]);
+        const month = parseInt(filterMonth.split('-')[1]);
+        const startOfMonth = new Date(year, month - 1, 1);
+        const endOfMonth = new Date(year, month, 0);
+        params.append('start_date', format(startOfMonth, 'yyyy-MM-dd'));
+        params.append('end_date', format(endOfMonth, 'yyyy-MM-dd'));
       }
       
       if (categoryTypeFilter) params.append('category_filter', categoryTypeFilter);
@@ -274,6 +300,33 @@ export default function FluxoCaixa() {
     }
   };
 
+  const loadCashFlowSummary = async () => {
+    try {
+      const params = new URLSearchParams();
+      
+      // Se há datas customizadas, usar elas; senão usar o mês selecionado
+      if (startDate && endDate) {
+        params.append('start_date', format(startDate, 'yyyy-MM-dd'));
+        params.append('end_date', format(endDate, 'yyyy-MM-dd'));
+      } else if (filterMonth) {
+        const year = parseInt(filterMonth.split('-')[0]);
+        const month = parseInt(filterMonth.split('-')[1]);
+        const startOfMonth = new Date(year, month - 1, 1);
+        const endOfMonth = new Date(year, month, 0);
+        params.append('start_date', format(startOfMonth, 'yyyy-MM-dd'));
+        params.append('end_date', format(endOfMonth, 'yyyy-MM-dd'));
+      } else {
+        params.append('period', 'current_month');
+      }
+      
+      const summaryResponse = await api.get(`/api/v1/cash-flow/summary?${params}`);
+      setSummary(summaryResponse.data);
+    } catch (error) {
+      console.error('Erro ao carregar resumo do fluxo de caixa:', error);
+      toast.error('Erro ao carregar resumo do fluxo de caixa');
+    }
+  };
+
   const loadData = async () => {
     try {
       setLoading(true);
@@ -284,12 +337,9 @@ export default function FluxoCaixa() {
         loadCategoriesSummary(),
         loadFilterOptions(),
         loadDRE(),
-        loadPayablesByMonth()
+        loadPayablesByMonth(),
+        loadCashFlowSummary()
       ]);
-      
-      // Carregar resumo (apenas mês atual para análise focada)
-      const summaryResponse = await api.get('/api/v1/cash-flow/summary?period=current_month');
-      setSummary(summaryResponse.data);
       
       // Carregar previsão
       const forecastResponse = await api.get('/api/v1/cash-flow/forecast?days_ahead=30');
@@ -385,19 +435,19 @@ export default function FluxoCaixa() {
     if (!loading) {
       loadMovements();
     }
-  }, [currentPage, pageSize, searchTerm, movementTypeFilter, statusFilter, customerSupplierFilter, categoryFilter, accountFilter, startDate, endDate]);
+  }, [currentPage, pageSize, searchTerm, movementTypeFilter, statusFilter, customerSupplierFilter, categoryFilter, accountFilter, startDate, endDate, filterMonth]);
 
   useEffect(() => {
     if (!loading && activeTab === "categorias") {
       loadCategoriesSummary();
     }
-  }, [activeTab, startDate, endDate, categoryTypeFilter, periodFilter]);
+  }, [activeTab, filterMonth, categoryTypeFilter]);
 
   useEffect(() => {
     if (!loading && activeTab === "dre") {
       loadDRE();
     }
-  }, [activeTab, startDate, endDate, drePeriodFilter]);
+  }, [activeTab, filterMonth]);
 
   useEffect(() => {
     if (!loading && activeTab === "contas") {
@@ -411,7 +461,13 @@ export default function FluxoCaixa() {
     if (!loading && activeTab === "contas") {
       loadPayablesForContasTab();
     }
-  }, [activeTab, currentPage, pageSize, searchTerm, statusFilter, customerSupplierFilter, categoryFilter, accountFilter, startDate, endDate]);
+  }, [activeTab, currentPage, pageSize, searchTerm, statusFilter, customerSupplierFilter, categoryFilter, accountFilter, startDate, endDate, filterMonth]);
+
+  useEffect(() => {
+    if (!loading) {
+      loadCashFlowSummary();
+    }
+  }, [startDate, endDate, filterMonth]);
 
   const handleViewMovement = (movement: CashFlowMovement) => {
     setSelectedMovement(movement);
@@ -458,14 +514,13 @@ export default function FluxoCaixa() {
     setAccountFilter("");
     setStartDate(undefined);
     setEndDate(undefined);
+    setFilterMonth(new Date().toISOString().slice(0, 7));
     setCurrentPage(1);
   };
 
   const clearCategoryFilters = () => {
     setCategoryTypeFilter("");
-    setPeriodFilter("current_month");
-    setStartDate(undefined);
-    setEndDate(undefined);
+    setFilterMonth(new Date().toISOString().slice(0, 7));
   };
 
   const formatCurrency = (value: number) => {
@@ -616,7 +671,7 @@ export default function FluxoCaixa() {
           </TabsTrigger>
           <TabsTrigger value="categorias" className="flex items-center gap-2">
             <Settings className="h-4 w-4" />
-            Categorias
+            Análise Entrada e Saída
           </TabsTrigger>
           <TabsTrigger value="dre" className="flex items-center gap-2">
             <BarChart3 className="h-4 w-4" />
@@ -666,6 +721,14 @@ export default function FluxoCaixa() {
                     </div>
                   </div>
                   <div className="flex space-x-2">
+                    <div className="flex flex-col gap-1">
+                      <Input
+                        type="month"
+                        value={filterMonth}
+                        onChange={(e) => setFilterMonth(e.target.value)}
+                        className="w-[180px]"
+                      />
+                    </div>
                     <Popover>
                       <PopoverTrigger asChild>
                         <Button variant="outline" className="w-40">
@@ -812,7 +875,7 @@ export default function FluxoCaixa() {
                 </div>
 
                 {/* Indicadores de filtros ativos */}
-                {(startDate || endDate || movementTypeFilter || statusFilter || customerSupplierFilter || categoryFilter || accountFilter) && (
+                {(startDate || endDate || movementTypeFilter || statusFilter || customerSupplierFilter || categoryFilter || accountFilter || filterMonth !== new Date().toISOString().slice(0, 7)) && (
                   <div className="flex flex-wrap gap-2">
                     {startDate && (
                       <Badge variant="secondary">
@@ -826,6 +889,14 @@ export default function FluxoCaixa() {
                       <Badge variant="secondary">
                         Fim: {format(endDate, "dd/MM/yyyy", { locale: ptBR })}
                         <Button variant="ghost" size="sm" className="ml-1 h-4 w-4 p-0" onClick={() => setEndDate(undefined)}>
+                          <X className="h-3 w-3" />
+                        </Button>
+                      </Badge>
+                    )}
+                    {filterMonth !== new Date().toISOString().slice(0, 7) && (
+                      <Badge variant="secondary">
+                        Mês: {new Date(filterMonth + '-01').toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}
+                        <Button variant="ghost" size="sm" className="ml-1 h-4 w-4 p-0" onClick={() => setFilterMonth(new Date().toISOString().slice(0, 7))}>
                           <X className="h-3 w-3" />
                         </Button>
                       </Badge>
@@ -979,69 +1050,44 @@ export default function FluxoCaixa() {
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
               <div>
-                <CardTitle>Análise por Categorias</CardTitle>
-                <CardDescription>Entradas e saídas agrupadas por categoria com percentuais</CardDescription>
+                <CardTitle>Análise de Entrada e Saída</CardTitle>
+                <CardDescription>Análise de entrada e saída</CardDescription>
               </div>
               <div className="flex space-x-2">
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button variant="outline">
-                      <CalendarIcon className="mr-2 h-4 w-4" />
-                      {startDate ? format(startDate, "dd/MM/yyyy", { locale: ptBR }) : "Vencimento Início"}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0" align="start">
-                    <CalendarComponent
-                      mode="single"
-                      selected={startDate}
-                      onSelect={setStartDate}
-                      initialFocus
-                    />
-                  </PopoverContent>
-                </Popover>
-                
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button variant="outline">
-                      <CalendarIcon className="mr-2 h-4 w-4" />
-                      {endDate ? format(endDate, "dd/MM/yyyy", { locale: ptBR }) : "Vencimento Fim"}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0" align="start">
-                    <CalendarComponent
-                      mode="single"
-                      selected={endDate}
-                      onSelect={setEndDate}
-                      initialFocus
-                    />
-                  </PopoverContent>
-                </Popover>
+                <div className="flex flex-col gap-1">
+                  <Input
+                    type="month"
+                    value={filterMonth}
+                    onChange={(e) => setFilterMonth(e.target.value)}
+                    className="w-[180px]"
+                  />
+                </div>
+                <Button variant="outline" onClick={clearCategoryFilters}>
+                  <X className="mr-2 h-4 w-4" />
+                  Limpar
+                </Button>
               </div>
             </CardHeader>
             <CardContent>
               <div className="space-y-8">
-                {/* Filtros de Categoria */}
+                {/* Filtros */}
                 <div className="flex flex-col space-y-4 md:flex-row md:space-y-0 md:space-x-4">
+                  <div className="flex flex-col gap-1">
+                    <Input
+                      type="month"
+                      value={filterMonth}
+                      onChange={(e) => setFilterMonth(e.target.value)}
+                      className="w-[180px]"
+                    />
+                  </div>
                   <Select value={categoryTypeFilter} onValueChange={setCategoryTypeFilter}>
                     <SelectTrigger className="w-40">
-                      <SelectValue placeholder="Tipo de Categoria" />
+                      <SelectValue placeholder="Tipo" />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="">Todos</SelectItem>
                       <SelectItem value="receivable">Entradas</SelectItem>
                       <SelectItem value="payable">Saídas</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <Select value={periodFilter} onValueChange={setPeriodFilter}>
-                    <SelectTrigger className="w-40">
-                      <SelectValue placeholder="Período" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="current_month">Mês Atual</SelectItem>
-                      <SelectItem value="3_months">Últimos 3 Meses</SelectItem>
-                      <SelectItem value="6_months">Últimos 6 Meses</SelectItem>
-                      <SelectItem value="12_months">Últimos 12 Meses</SelectItem>
-                      <SelectItem value="year">Este Ano</SelectItem>
                     </SelectContent>
                   </Select>
                   <Button variant="outline" onClick={clearCategoryFilters}>
@@ -1050,16 +1096,50 @@ export default function FluxoCaixa() {
                   </Button>
                 </div>
 
+                {/* Totalizadores */}
+                {categoriesSummary && (
+                  <div className="grid gap-6 md:grid-cols-3">
+                    <Card>
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-sm font-medium text-success">Total Entradas</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="text-2xl font-bold text-success">
+                          {formatCurrency(categoriesSummary.total_entries)}
+                        </div>
+                      </CardContent>
+                    </Card>
+                    <Card>
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-sm font-medium text-destructive">Total Saídas</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="text-2xl font-bold text-destructive">
+                          {formatCurrency(categoriesSummary.total_exits)}
+                        </div>
+                      </CardContent>
+                    </Card>
+                    <Card>
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-sm font-medium">Saldo Líquido</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className={`text-2xl font-bold ${
+                          (categoriesSummary.total_entries - categoriesSummary.total_exits) >= 0 
+                            ? 'text-success' 
+                            : 'text-destructive'
+                        }`}>
+                          {formatCurrency(categoriesSummary.total_entries - categoriesSummary.total_exits)}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+                )}
+
                 {/* Tabela de Entradas */}
                 <div>
-                  <div className="flex items-center justify-between mb-4">
+                  <div className="mb-4">
                     <h3 className="text-lg font-semibold text-success">Categorias de Entrada</h3>
-                    <div className="text-right">
-                      <p className="text-sm text-muted-foreground">Total Geral</p>
-                      <p className="text-lg font-bold text-success">
-                        {categoriesSummary ? formatCurrency(categoriesSummary.total_entries) : 'R$ 0,00'}
-                      </p>
-                    </div>
                   </div>
                   
                   <div className="rounded-md border">
@@ -1101,14 +1181,8 @@ export default function FluxoCaixa() {
 
                 {/* Tabela de Saídas */}
                 <div>
-                  <div className="flex items-center justify-between mb-4">
+                  <div className="mb-4">
                     <h3 className="text-lg font-semibold text-destructive">Categorias de Saída</h3>
-                    <div className="text-right">
-                      <p className="text-sm text-muted-foreground">Total Geral</p>
-                      <p className="text-lg font-bold text-destructive">
-                        {categoriesSummary ? formatCurrency(categoriesSummary.total_exits) : 'R$ 0,00'}
-                      </p>
-                    </div>
                   </div>
                   
                   <div className="rounded-md border">
@@ -1297,45 +1371,7 @@ export default function FluxoCaixa() {
                   </div>
                 )}
 
-                {/* Resumo Geral */}
-                {categoriesSummary && (
-                  <div className="grid gap-6 md:grid-cols-3">
-                    <Card>
-                      <CardHeader className="pb-2">
-                        <CardTitle className="text-sm font-medium text-success">Total Entradas</CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="text-2xl font-bold text-success">
-                          {formatCurrency(categoriesSummary.total_entries)}
-                        </div>
-                      </CardContent>
-                    </Card>
-                    <Card>
-                      <CardHeader className="pb-2">
-                        <CardTitle className="text-sm font-medium text-destructive">Total Saídas</CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="text-2xl font-bold text-destructive">
-                          {formatCurrency(categoriesSummary.total_exits)}
-                        </div>
-                      </CardContent>
-                    </Card>
-                    <Card>
-                      <CardHeader className="pb-2">
-                        <CardTitle className="text-sm font-medium">Saldo Líquido</CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <div className={`text-2xl font-bold ${
-                          (categoriesSummary.total_entries - categoriesSummary.total_exits) >= 0 
-                            ? 'text-success' 
-                            : 'text-destructive'
-                        }`}>
-                          {formatCurrency(categoriesSummary.total_entries - categoriesSummary.total_exits)}
-                        </div>
-                      </CardContent>
-                    </Card>
-                  </div>
-                )}
+
               </div>
             </CardContent>
           </Card>
@@ -1422,6 +1458,14 @@ export default function FluxoCaixa() {
                         )}
                       </SelectContent>
                     </Select>
+                    <div className="flex flex-col gap-1">
+                      <Input
+                        type="month"
+                        value={filterMonth}
+                        onChange={(e) => setFilterMonth(e.target.value)}
+                        className="w-[180px]"
+                      />
+                    </div>
                     <Popover>
                       <PopoverTrigger asChild>
                         <Button variant="outline" className="w-40">
@@ -1460,6 +1504,7 @@ export default function FluxoCaixa() {
                       setSearchTerm("");
                       setStatusFilter("");
                       setAccountFilter("");
+                      setFilterMonth(new Date().toISOString().slice(0, 7));
                     }}>
                       <X className="mr-2 h-4 w-4" />
                       Limpar
@@ -1709,40 +1754,97 @@ export default function FluxoCaixa() {
         {/* Aba: DRE */}
         <TabsContent value="dre" className="space-y-6">
           <Card>
-            <CardHeader>
-              <CardTitle>Demonstração do Resultado do Exercício (DRE)</CardTitle>
-              <CardDescription>Resumo das receitas, custos e resultados da empresa</CardDescription>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <div>
+                <CardTitle>Demonstração do Resultado do Exercício (DRE)</CardTitle>
+                <CardDescription>Resumo das receitas, custos e resultados da empresa</CardDescription>
+              </div>
+              <div className="flex space-x-2">
+                <div className="flex flex-col gap-1">
+                  <Input
+                    type="month"
+                    value={filterMonth}
+                    onChange={(e) => setFilterMonth(e.target.value)}
+                    className="w-[180px]"
+                  />
+                </div>
+                <Button variant="outline" onClick={() => setFilterMonth(new Date().toISOString().slice(0, 7))}>
+                  <X className="mr-2 h-4 w-4" />
+                  Limpar
+                </Button>
+              </div>
             </CardHeader>
             <CardContent>
               <div className="space-y-8">
-                {/* Filtros do DRE */}
-                <div className="flex flex-col space-y-4 md:flex-row md:space-y-0 md:space-x-4">
-                  <Select value={drePeriodFilter} onValueChange={setDrePeriodFilter}>
-                    <SelectTrigger className="w-40">
-                      <SelectValue placeholder="Período" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="current_month">Mês Atual</SelectItem>
-                      <SelectItem value="3_months">Últimos 3 Meses</SelectItem>
-                      <SelectItem value="6_months">Últimos 6 Meses</SelectItem>
-                      <SelectItem value="12_months">Últimos 12 Meses</SelectItem>
-                      <SelectItem value="year">Este Ano</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <Button variant="outline" onClick={() => setStartDate(undefined)}>
-                    <X className="mr-2 h-4 w-4" />
-                    Limpar Período
-                  </Button>
-                </div>
+                {/* Resumo dos Indicadores */}
+                {dreData && (
+                  <div className="grid gap-4 md:grid-cols-4">
+                    <Card>
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-sm font-medium text-success">Receita Bruta</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="text-2xl font-bold text-success">
+                          {formatCurrency(dreData.revenue_total)}
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          Base de cálculo: 100%
+                        </p>
+                      </CardContent>
+                    </Card>
+                    
+                    <Card>
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-sm font-medium text-blue-600">Lucro Bruto</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="text-2xl font-bold text-blue-600">
+                          {formatCurrency(dreData.gross_profit)}
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          {dreData.revenue_total > 0 ? ((dreData.gross_profit / dreData.revenue_total) * 100).toFixed(1) : '0'}% da receita
+                        </p>
+                      </CardContent>
+                    </Card>
+                    
+                    <Card>
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-sm font-medium text-orange-600">Resultado Operacional</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="text-2xl font-bold text-orange-600">
+                          {formatCurrency(dreData.operational_result)}
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          {dreData.revenue_total > 0 ? ((dreData.operational_result / dreData.revenue_total) * 100).toFixed(1) : '0'}% da receita
+                        </p>
+                      </CardContent>
+                    </Card>
+                    
+                    <Card>
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-sm font-medium text-primary">Resultado Líquido</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className={`text-2xl font-bold ${dreData.net_result >= 0 ? 'text-success' : 'text-destructive'}`}>
+                          {formatCurrency(dreData.net_result)}
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          {dreData.revenue_total > 0 ? ((dreData.net_result / dreData.revenue_total) * 100).toFixed(1) : '0'}% da receita
+                        </p>
+                      </CardContent>
+                    </Card>
+                  </div>
+                )}
 
                 {/* Tabela DRE */}
                 <div className="rounded-md border">
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead className="text-left">Descrição</TableHead>
-                        <TableHead className="text-right">Valor</TableHead>
-                        <TableHead className="text-right">% Receita</TableHead>
+                        <TableHead className="text-left font-bold">Descrição</TableHead>
+                        <TableHead className="text-left font-bold">Valor</TableHead>
+                        <TableHead className="text-left font-bold">% Receita</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -1750,7 +1852,7 @@ export default function FluxoCaixa() {
                         <React.Fragment key={`${section.title}-${sectionIndex}`}>
                           {/* Cabeçalho da Seção */}
                           <TableRow className="bg-muted/50">
-                            <TableCell colSpan={3} className="font-bold text-center py-3">
+                            <TableCell colSpan={3} className="font-bold text-left py-3">
                               {section.title}
                             </TableCell>
                           </TableRow>
@@ -1812,67 +1914,6 @@ export default function FluxoCaixa() {
                     </TableBody>
                   </Table>
                 </div>
-
-                {/* Resumo dos Indicadores */}
-                {dreData && (
-                  <div className="grid gap-4 md:grid-cols-4">
-                    <Card>
-                      <CardHeader className="pb-2">
-                        <CardTitle className="text-sm font-medium text-success">Receita Bruta</CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="text-2xl font-bold text-success">
-                          {formatCurrency(dreData.revenue_total)}
-                        </div>
-                        <p className="text-xs text-muted-foreground">
-                          Base de cálculo: 100%
-                        </p>
-                      </CardContent>
-                    </Card>
-                    
-                    <Card>
-                      <CardHeader className="pb-2">
-                        <CardTitle className="text-sm font-medium text-blue-600">Lucro Bruto</CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="text-2xl font-bold text-blue-600">
-                          {formatCurrency(dreData.gross_profit)}
-                        </div>
-                        <p className="text-xs text-muted-foreground">
-                          {dreData.revenue_total > 0 ? ((dreData.gross_profit / dreData.revenue_total) * 100).toFixed(1) : '0'}% da receita
-                        </p>
-                      </CardContent>
-                    </Card>
-                    
-                    <Card>
-                      <CardHeader className="pb-2">
-                        <CardTitle className="text-sm font-medium text-orange-600">Resultado Operacional</CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="text-2xl font-bold text-orange-600">
-                          {formatCurrency(dreData.operational_result)}
-                        </div>
-                        <p className="text-xs text-muted-foreground">
-                          {dreData.revenue_total > 0 ? ((dreData.operational_result / dreData.revenue_total) * 100).toFixed(1) : '0'}% da receita
-                        </p>
-                      </CardContent>
-                    </Card>
-                    
-                    <Card>
-                      <CardHeader className="pb-2">
-                        <CardTitle className="text-sm font-medium text-primary">Resultado Líquido</CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <div className={`text-2xl font-bold ${dreData.net_result >= 0 ? 'text-success' : 'text-destructive'}`}>
-                          {formatCurrency(dreData.net_result)}
-                        </div>
-                        <p className="text-xs text-muted-foreground">
-                          {dreData.revenue_total > 0 ? ((dreData.net_result / dreData.revenue_total) * 100).toFixed(1) : '0'}% da receita
-                        </p>
-                      </CardContent>
-                    </Card>
-                  </div>
-                )}
               </div>
             </CardContent>
           </Card>

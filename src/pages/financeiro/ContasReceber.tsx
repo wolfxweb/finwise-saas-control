@@ -119,6 +119,7 @@ export default function ContasReceber() {
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [filterStatus, setFilterStatus] = useState<string>("all");
+  const [filterMonth, setFilterMonth] = useState<string>(new Date().toISOString().slice(0, 7));
   
   // Estados para filtros avançados
   const [isFilterDialogOpen, setIsFilterDialogOpen] = useState(false);
@@ -133,7 +134,7 @@ export default function ContasReceber() {
     tipo: '',
     reference: ''
   });
-  const [useFilteredStats, setUseFilteredStats] = useState<boolean>(false);
+
   
   // Estados para paginação e ordenação
   const [currentPage, setCurrentPage] = useState(1);
@@ -237,7 +238,7 @@ export default function ContasReceber() {
   // Resetar página quando filtros mudarem
   useEffect(() => {
     resetPage();
-  }, [searchTerm, filterStatus]);
+  }, [searchTerm, filterStatus, filterMonth]);
 
   // Processar dados dos relatórios quando receivables, reportPeriod ou filtros mudarem
   useEffect(() => {
@@ -681,6 +682,16 @@ export default function ContasReceber() {
       if (filters.valorMin && valorReceivable < parseFloat(filters.valorMin)) return false;
       if (filters.valorMax && valorReceivable > parseFloat(filters.valorMax)) return false;
 
+      // Filtro por mês de vencimento
+      if (filterMonth) {
+        const dueDate = new Date(receivable.due_date);
+        const filterYear = parseInt(filterMonth.split('-')[0]);
+        const filterMonthNum = parseInt(filterMonth.split('-')[1]);
+        if (dueDate.getFullYear() !== filterYear || (dueDate.getMonth() + 1) !== filterMonthNum) {
+          return false;
+        }
+      }
+
       return true;
     });
   };
@@ -731,10 +742,25 @@ export default function ContasReceber() {
   const calculateFilteredStats = () => {
     const filteredData = applyFilters(receivables);
     
-    const total_receivable = filteredData.reduce((sum, receivable) => sum + receivable.total_amount, 0);
-    const total_paid = filteredData.reduce((sum, receivable) => sum + receivable.paid_amount, 0);
-    const total_overdue = filteredData.filter(r => r.status === 'overdue').reduce((sum, receivable) => sum + receivable.remaining_amount, 0);
-    const total_pending = filteredData.filter(r => r.status === 'pending').reduce((sum, receivable) => sum + receivable.remaining_amount, 0);
+    const total_receivable = filteredData.reduce((sum, receivable) => {
+      const amount = Number(receivable.total_amount) || 0;
+      return sum + amount;
+    }, 0);
+    
+    const total_paid = filteredData.reduce((sum, receivable) => {
+      const amount = Number(receivable.paid_amount) || 0;
+      return sum + amount;
+    }, 0);
+    
+    const total_overdue = filteredData.filter(r => r.status === 'overdue').reduce((sum, receivable) => {
+      const amount = Number(receivable.remaining_amount) || 0;
+      return sum + amount;
+    }, 0);
+    
+    const total_pending = filteredData.filter(r => r.status === 'pending').reduce((sum, receivable) => {
+      const amount = Number(receivable.remaining_amount) || 0;
+      return sum + amount;
+    }, 0);
     
     return {
       total_receivable,
@@ -758,20 +784,22 @@ export default function ContasReceber() {
       reference: ''
     });
     setSearchTerm('');
+    setFilterMonth(new Date().toISOString().slice(0, 7));
     setCurrentPage(1);
-    setUseFilteredStats(false);
   };
 
   // Função para aplicar filtros
   const handleApplyFilters = () => {
     setCurrentPage(1);
     setIsFilterDialogOpen(false);
-    setUseFilteredStats(true);
   };
 
   // Função para verificar se há filtros ativos
   const hasActiveFilters = () => {
-    return Object.values(filters).some(value => value !== '') || searchTerm !== '';
+    const currentMonth = new Date().toISOString().slice(0, 7);
+    return Object.values(filters).some(value => value !== '') || 
+           searchTerm !== '' || 
+           filterMonth !== currentMonth;
   };
 
   const aplicarFiltrosRelatorio = (dados: any[]) => {
@@ -1139,58 +1167,58 @@ export default function ContasReceber() {
             <div className="grid gap-6 md:grid-cols-4">
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">
-                    Total a Receber
-                    {useFilteredStats && <Badge variant="secondary" className="ml-2 text-xs">Filtrado</Badge>}
-                  </CardTitle>
+                  <CardTitle className="text-sm font-medium">Total a Receber</CardTitle>
                   <DollarSign className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
                   <div className="text-2xl font-bold text-primary">
-                    R$ {(useFilteredStats ? calculateFilteredStats().total_receivable : summary.total_receivable).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                    R$ {calculateFilteredStats().total_receivable.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                   </div>
+                  {hasActiveFilters() && (
+                    <Badge variant="secondary" className="mt-1">Filtrado</Badge>
+                  )}
                 </CardContent>
               </Card>
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">
-                    Recebido
-                    {useFilteredStats && <Badge variant="secondary" className="ml-2 text-xs">Filtrado</Badge>}
-                  </CardTitle>
+                  <CardTitle className="text-sm font-medium">Recebido</CardTitle>
                   <DollarSign className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
                   <div className="text-2xl font-bold text-green-600">
-                    R$ {(useFilteredStats ? calculateFilteredStats().total_paid : summary.total_paid).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                    R$ {calculateFilteredStats().total_paid.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                   </div>
+                  {hasActiveFilters() && (
+                    <Badge variant="secondary" className="mt-1">Filtrado</Badge>
+                  )}
                 </CardContent>
               </Card>
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">
-                    Em Atraso
-                    {useFilteredStats && <Badge variant="secondary" className="ml-2 text-xs">Filtrado</Badge>}
-                  </CardTitle>
+                  <CardTitle className="text-sm font-medium">Em Atraso</CardTitle>
                   <Calendar className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
                   <div className="text-2xl font-bold text-destructive">
-                    R$ {(useFilteredStats ? calculateFilteredStats().total_overdue : summary.total_overdue).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                    R$ {calculateFilteredStats().total_overdue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                   </div>
+                  {hasActiveFilters() && (
+                    <Badge variant="secondary" className="mt-1">Filtrado</Badge>
+                  )}
                 </CardContent>
               </Card>
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">
-                    Pendente
-                    {useFilteredStats && <Badge variant="secondary" className="ml-2 text-xs">Filtrado</Badge>}
-                  </CardTitle>
+                  <CardTitle className="text-sm font-medium">Pendente</CardTitle>
                   <Calendar className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
                   <div className="text-2xl font-bold text-warning">
-                    R$ {(useFilteredStats ? calculateFilteredStats().total_pending : summary.total_pending).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                    R$ {calculateFilteredStats().total_pending.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                   </div>
+                  {hasActiveFilters() && (
+                    <Badge variant="secondary" className="mt-1">Filtrado</Badge>
+                  )}
                 </CardContent>
               </Card>
             </div>
@@ -1224,6 +1252,14 @@ export default function ContasReceber() {
                       <SelectItem value="cancelled">Cancelado</SelectItem>
                     </SelectContent>
                   </Select>
+                </div>
+                <div className="flex flex-col gap-1">
+                  <Input
+                    type="month"
+                    value={filterMonth}
+                    onChange={(e) => setFilterMonth(e.target.value)}
+                    className="w-full md:w-[180px]"
+                  />
                 </div>
                 <Button 
                   variant={hasActiveFilters() ? "default" : "outline"}
