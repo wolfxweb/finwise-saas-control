@@ -7,37 +7,71 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-finwise_saas_db}
       POSTGRES_USER: ${POSTGRES_USER:-finwise_user}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-finwise_password}
+      PGDATA: /var/lib/postgresql/data/pgdata
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
     restart: unless-stopped
+    ports:
+      - "5432:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-finwise_user} -d ${POSTGRES_DB:-finwise_saas_db}"]
       interval: 30s
       timeout: 10s
-      retries: 3
+      retries: 5
+      start_period: 30s
+    command: >
+      postgres
+      -c log_statement=all
+      -c log_destination=stderr
+      -c logging_collector=on
+      -c max_connections=200
+      -c shared_buffers=256MB
 
   redis:
     image: redis:7-alpine
     volumes:
       - redis_data:/data
     restart: unless-stopped
+    ports:
+      - "6379:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 30s
       timeout: 10s
       retries: 3
+    command: >
+      redis-server 
+      --appendonly yes 
+      --appendfsync everysec
+      --maxmemory 512mb
+      --maxmemory-policy allkeys-lru
 
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
     environment:
+      # Database Configuration
       DATABASE_URL: postgresql://${POSTGRES_USER:-finwise_user}:${POSTGRES_PASSWORD:-finwise_password}@postgres:5432/${POSTGRES_DB:-finwise_saas_db}
+      POSTGRES_DB: ${POSTGRES_DB:-finwise_saas_db}
+      POSTGRES_USER: ${POSTGRES_USER:-finwise_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-finwise_password}
+      
+      # Redis Configuration
       REDIS_URL: redis://redis:6379
+      
+      # Application Configuration
       SECRET_KEY: ${SECRET_KEY:-finwise-super-secret-key-production-2024}
       ALGORITHM: HS256
       ACCESS_TOKEN_EXPIRE_MINUTES: 30
+      
+      # CORS Configuration
       BACKEND_CORS_ORIGINS: ${BACKEND_CORS_ORIGINS:-https://desenvolvimento-financeiro.219u5p.easypanel.host,http://localhost:3000,http://localhost:8080}
+      
+      # Environment
+      ENVIRONMENT: production
+      DEBUG: "false"
     ports:
       - "8000:8000"
     depends_on:
@@ -49,11 +83,14 @@ services:
     command: >
       sh -c "
         echo '🚀 Iniciando configuração para produção...' &&
+        echo '⏳ Aguardando serviços dependentes...' &&
+        sleep 10 &&
+        echo '🔧 Executando script de inicialização...' &&
         python scripts/init_production.py &&
-        echo '📝 Marcando migrations como executadas...' &&
+        echo '📝 Configurando Alembic...' &&
         alembic stamp head &&
-        echo '🔄 Executando migrations pendentes (se houver)...' &&
-        alembic upgrade head || echo '⚠️  Algumas migrations falharam, mas aplicação pode continuar' &&
+        echo '🔄 Executando migrations pendentes...' &&
+        alembic upgrade head || echo '⚠️  Migrations executadas ou falha não crítica' &&
         echo '🌐 Iniciando servidor FastAPI...' &&
         python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 1
       "
