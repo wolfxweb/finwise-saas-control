@@ -42,11 +42,11 @@ def import_all_models():
         # Import all models to ensure they are registered with Base
         from app.models.user import User
         from app.models.company import Company, Branch
-        from app.models.plan import Plan, Module, CompanyModule, PlanModule
+        from app.models.plan import Plan, Module, CompanyModule, PlanModule, CompanySubscription  # CORRIGIDO: CompanySubscription está em plan.py
         from app.models.supplier import Supplier
         from app.models.customer import Customer
         from app.models.product import Product
-        from app.models.product_sku import ProductSKU  # CORRIGIDO: ProductSKU em vez de ProductSku
+        from app.models.product_sku import ProductSKU
         from app.models.product_component import ProductComponent
         from app.models.category import Category
         from app.models.stock_movement import StockMovement
@@ -57,7 +57,7 @@ def import_all_models():
         from app.models.account import Account
         from app.models.bank import Bank
         from app.models.nota_fiscal import NotaFiscal
-        from app.models.billing import CompanySubscription, Invoice, InvoiceItem, Payment, BillingSetting
+        from app.models.billing import Invoice, InvoiceItem, Payment, BillingSettings  # CORRIGIDO: Removido CompanySubscription daqui
         
         logger.info("✅ Todos os modelos importados!")
         return True
