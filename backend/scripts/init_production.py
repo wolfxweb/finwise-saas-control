@@ -46,7 +46,7 @@ def import_all_models():
         from app.models.supplier import Supplier
         from app.models.customer import Customer
         from app.models.product import Product
-        from app.models.product_sku import ProductSku
+        from app.models.product_sku import ProductSKU  # CORRIGIDO: ProductSKU em vez de ProductSku
         from app.models.product_component import ProductComponent
         from app.models.category import Category
         from app.models.stock_movement import StockMovement
