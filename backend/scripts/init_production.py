@@ -19,20 +19,85 @@ import logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-def wait_for_db(max_retries=30):
-    """Aguarda o banco de dados ficar disponível"""
+def wait_for_db(max_retries=60):
+    """Aguardar conexão com banco de dados com retry mais robusto"""
     logger.info("Aguardando banco de dados...")
-    for attempt in range(max_retries):
+    
+    import os
+    import psycopg2
+    
+    # Configurações de conexão a partir das variáveis de ambiente
+    db_config = {
+        'host': os.getenv('POSTGRES_HOST', 'postgres'),
+        'port': int(os.getenv('POSTGRES_PORT', '5432')),
+        'database': os.getenv('POSTGRES_DB', 'finwise_saas_db'),
+        'user': os.getenv('POSTGRES_USER', 'finwise_user'),
+        'password': os.getenv('POSTGRES_PASSWORD', 'finwise_password'),
+    }
+    
+    logger.info(f"🔗 Tentando conectar em: {db_config['user']}@{db_config['host']}:{db_config['port']}/{db_config['database']}")
+    
+    for attempt in range(1, max_retries + 1):
         try:
-            with engine.connect() as conn:
-                conn.execute(text("SELECT 1"))
+            # Primeiro tentar conectar no banco postgres padrão para verificar se o servidor está rodando
+            test_config = db_config.copy()
+            test_config['database'] = 'postgres'
+            
+            with psycopg2.connect(**test_config) as test_conn:
+                with test_conn.cursor() as cursor:
+                    cursor.execute("SELECT version();")
+                    version = cursor.fetchone()[0]
+                    logger.info(f"📊 PostgreSQL detectado: {version}")
+            
+            # Agora tentar conectar no banco de dados específico
+            with psycopg2.connect(**db_config) as conn:
+                with conn.cursor() as cursor:
+                    cursor.execute("SELECT current_database(), current_user;")
+                    db_name, db_user = cursor.fetchone()
+                    logger.info(f"✅ Conectado com sucesso! Database: {db_name}, User: {db_user}")
+                    
+                    # Testar se conseguimos criar uma tabela temporária (teste de permissões)
+                    cursor.execute("""
+                        CREATE TABLE IF NOT EXISTS _test_connection (
+                            id SERIAL PRIMARY KEY,
+                            created_at TIMESTAMP DEFAULT NOW()
+                        );
+                        DROP TABLE IF EXISTS _test_connection;
+                    """)
+                    conn.commit()
+                    logger.info("🔐 Permissões de escrita confirmadas!")
+                    
             logger.info("✅ Banco de dados conectado!")
             return True
+            
+        except psycopg2.OperationalError as e:
+            error_msg = str(e)
+            
+            if "password authentication failed" in error_msg:
+                logger.warning(f"🔐 Tentativa {attempt}/{max_retries} - Erro de autenticação. Aguardando PostgreSQL configurar credenciais...")
+            elif "does not exist" in error_msg:
+                logger.warning(f"🗃️ Tentativa {attempt}/{max_retries} - Database não existe ainda. Aguardando criação...")
+            elif "connection to server" in error_msg:
+                logger.warning(f"🌐 Tentativa {attempt}/{max_retries} - Servidor PostgreSQL não está pronto...")
+            else:
+                logger.warning(f"⏳ Tentativa {attempt}/{max_retries} - Aguardando BD... ({error_msg})")
+            
+            if attempt == max_retries:
+                logger.error(f"❌ Falha na conexão após {max_retries} tentativas!")
+                logger.error(f"💡 Configuração usada: {db_config}")
+                logger.error(f"🚨 Último erro: {error_msg}")
+                return False
+            
+            # Aguardar antes da próxima tentativa
+            sleep_time = min(5 + (attempt * 2), 30)  # Backoff progressivo, máximo 30s
+            time.sleep(sleep_time)
+            
         except Exception as e:
-            logger.info(f"⏳ Tentativa {attempt + 1}/{max_retries} - Aguardando BD... ({e})")
-            time.sleep(2)
+            logger.error(f"❌ Erro inesperado na tentativa {attempt}: {e}")
+            if attempt == max_retries:
+                return False
+            time.sleep(5)
     
-    logger.error("❌ Falha ao conectar com o banco de dados!")
     return False
 
 def import_all_models():
