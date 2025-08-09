@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Plus, Search, Filter, Download, TrendingUp, TrendingDown, Calendar, AlertTriangle, BarChart3, FileText, Settings, Target, DollarSign, Eye, Edit, ChevronLeft, ChevronRight, CalendarIcon, X, PieChart } from "lucide-react";
+import { Plus, Search, Filter, Download, TrendingUp, TrendingDown, Calendar, AlertTriangle, BarChart3, FileText, Settings, Target, DollarSign, Eye, Edit, ChevronLeft, ChevronRight, CalendarIcon, X, PieChart, CreditCard } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -143,6 +143,7 @@ export default function FluxoCaixa() {
   const [dreData, setDreData] = useState<DREResponse | null>(null);
   const [payablesByMonth, setPayablesByMonth] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [bankBalance, setBankBalance] = useState<{total_balance: number; total_available: number} | null>(null);
   const [selectedMovement, setSelectedMovement] = useState<CashFlowMovement | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
@@ -157,7 +158,7 @@ export default function FluxoCaixa() {
   const [endDate, setEndDate] = useState<Date | undefined>(undefined);
 
   // Filtros específicos da aba categorias
-  const [categoryTypeFilter, setCategoryTypeFilter] = useState<string>("");
+  // (removido categoryTypeFilter - agora usando apenas filterMonth)
 
   // Filtros específicos do DRE
   // (removido drePeriodFilter - agora usando filterMonth)
@@ -272,8 +273,6 @@ export default function FluxoCaixa() {
         params.append('end_date', format(endOfMonth, 'yyyy-MM-dd'));
       }
       
-      if (categoryTypeFilter) params.append('category_filter', categoryTypeFilter);
-      
       const response = await api.get(`/api/v1/cash-flow/categories-summary?${params}`);
       setCategoriesSummary(response.data);
     } catch (error) {
@@ -297,6 +296,19 @@ export default function FluxoCaixa() {
     } catch (error) {
       console.error('❌ Erro ao carregar opções de filtro:', error);
       toast.error('Erro ao carregar opções de filtro');
+    }
+  };
+
+  const loadBankBalance = async () => {
+    try {
+      const response = await api.get('/api/v1/accounts/reports/summary');
+      setBankBalance({
+        total_balance: response.data.total_balance,
+        total_available: response.data.total_available
+      });
+    } catch (error) {
+      console.error('Erro ao carregar saldo bancário:', error);
+      toast.error('Erro ao carregar saldo bancário');
     }
   };
 
@@ -338,7 +350,8 @@ export default function FluxoCaixa() {
         loadFilterOptions(),
         loadDRE(),
         loadPayablesByMonth(),
-        loadCashFlowSummary()
+        loadCashFlowSummary(),
+        loadBankBalance()
       ]);
       
       // Carregar previsão
@@ -441,7 +454,7 @@ export default function FluxoCaixa() {
     if (!loading && activeTab === "categorias") {
       loadCategoriesSummary();
     }
-  }, [activeTab, filterMonth, categoryTypeFilter]);
+  }, [activeTab, filterMonth]);
 
   useEffect(() => {
     if (!loading && activeTab === "dre") {
@@ -519,7 +532,6 @@ export default function FluxoCaixa() {
   };
 
   const clearCategoryFilters = () => {
-    setCategoryTypeFilter("");
     setFilterMonth(new Date().toISOString().slice(0, 7));
   };
 
@@ -658,6 +670,24 @@ export default function FluxoCaixa() {
               {forecast.length > 0 ? formatCurrency(forecast[forecast.length - 1].expected_balance) : 'R$ 0,00'}
             </div>
             <p className="text-xs text-muted-foreground">Cenário realista</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Saldo Bancário */}
+      <div className="flex justify-center">
+        <Card className="w-full max-w-md">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Saldo Bancário Total</CardTitle>
+            <CreditCard className="h-4 w-4 text-primary" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold text-primary">
+              {bankBalance ? formatCurrency(bankBalance.total_balance) : 'R$ 0,00'}
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">
+              Disponível: {bankBalance ? formatCurrency(bankBalance.total_available) : 'R$ 0,00'}
+            </p>
           </CardContent>
         </Card>
       </div>
@@ -1070,32 +1100,6 @@ export default function FluxoCaixa() {
             </CardHeader>
             <CardContent>
               <div className="space-y-8">
-                {/* Filtros */}
-                <div className="flex flex-col space-y-4 md:flex-row md:space-y-0 md:space-x-4">
-                  <div className="flex flex-col gap-1">
-                    <Input
-                      type="month"
-                      value={filterMonth}
-                      onChange={(e) => setFilterMonth(e.target.value)}
-                      className="w-[180px]"
-                    />
-                  </div>
-                  <Select value={categoryTypeFilter} onValueChange={setCategoryTypeFilter}>
-                    <SelectTrigger className="w-40">
-                      <SelectValue placeholder="Tipo" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="">Todos</SelectItem>
-                      <SelectItem value="receivable">Entradas</SelectItem>
-                      <SelectItem value="payable">Saídas</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <Button variant="outline" onClick={clearCategoryFilters}>
-                    <X className="mr-2 h-4 w-4" />
-                    Limpar
-                  </Button>
-                </div>
-
                 {/* Totalizadores */}
                 {categoriesSummary && (
                   <div className="grid gap-6 md:grid-cols-3">
@@ -1225,53 +1229,6 @@ export default function FluxoCaixa() {
                 {/* Gráficos */}
                 {categoriesSummary && (
                   <div className="space-y-6">
-                    {/* Gráfico de Linha - Evolução Mensal */}
-                    <Card>
-                      <CardHeader>
-                        <CardTitle className="flex items-center gap-2">
-                          <BarChart3 className="h-5 w-5" />
-                          Evolução Mensal - Entradas vs Saídas
-                        </CardTitle>
-                        <CardDescription>
-                          Comparação da evolução das entradas e saídas por data de vencimento
-                        </CardDescription>
-                      </CardHeader>
-                      <CardContent>
-                        {categoriesSummary?.chart_data?.line_data && categoriesSummary.chart_data.line_data.length > 0 ? (
-                          <ResponsiveContainer width="100%" height={400}>
-                            <LineChart data={categoriesSummary.chart_data.line_data}>
-                              <CartesianGrid strokeDasharray="3 3" />
-                              <XAxis dataKey="month" />
-                              <YAxis tickFormatter={(value) => formatCurrency(value || 0)} />
-                              <Tooltip formatter={(value) => formatCurrency(Number(value) || 0)} />
-                              <Legend />
-                              <Line 
-                                type="monotone" 
-                                dataKey="entradas" 
-                                stroke="#22c55e" 
-                                strokeWidth={3}
-                                name="Entradas" 
-                              />
-                              <Line 
-                                type="monotone" 
-                                dataKey="saidas" 
-                                stroke="#ef4444" 
-                                strokeWidth={3}
-                                name="Saídas" 
-                              />
-                            </LineChart>
-                          </ResponsiveContainer>
-                        ) : (
-                          <div className="flex items-center justify-center h-[400px] text-muted-foreground">
-                            <div className="text-center">
-                              <BarChart3 className="h-12 w-12 mx-auto mb-2 opacity-50" />
-                              <p>Nenhum dado mensal encontrado para o período selecionado</p>
-                            </div>
-                          </div>
-                        )}
-                      </CardContent>
-                    </Card>
-
                     {/* Gráficos de Pizza */}
                     <div className="grid gap-6 md:grid-cols-2">
                        {/* Gráfico de Pizza - Entradas */}
