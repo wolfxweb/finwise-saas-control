@@ -432,6 +432,106 @@ def init_basic_data():
         logger.error(f"❌ Erro ao inicializar dados básicos: {e}")
         return False
 
+def ensure_postgres_setup():
+    """Garantir que usuário e banco PostgreSQL estejam configurados corretamente"""
+    logger.info("🔧 Verificando configuração PostgreSQL...")
+    
+    import os
+    import psycopg2
+    from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
+    
+    # Configurações de conexão
+    db_config = {
+        'host': os.getenv('POSTGRES_HOST', 'postgres'),
+        'port': int(os.getenv('POSTGRES_PORT', '5432')),
+        'user': 'postgres',  # Usar usuário postgres para criar outros usuários
+        'password': os.getenv('POSTGRES_PASSWORD', 'finwise_password'),
+        'database': 'postgres'  # Conectar no banco postgres padrão
+    }
+    
+    target_user = os.getenv('POSTGRES_USER', 'finwise_user')
+    target_password = os.getenv('POSTGRES_PASSWORD', 'finwise_password')
+    target_database = os.getenv('POSTGRES_DB', 'finwise_saas_db')
+    
+    try:
+        # Conectar como postgres admin
+        with psycopg2.connect(**db_config) as conn:
+            conn.set_isolation_level(ISOLATION_LEVEL_AUTOCOMMIT)
+            with conn.cursor() as cursor:
+                logger.info(f"🔗 Conectado como postgres admin")
+                
+                # Verificar se usuário existe
+                cursor.execute("SELECT 1 FROM pg_roles WHERE rolname = %s", (target_user,))
+                user_exists = cursor.fetchone()
+                
+                if not user_exists:
+                    logger.info(f"👤 Criando usuário {target_user}...")
+                    cursor.execute(f"CREATE USER {target_user} WITH PASSWORD %s", (target_password,))
+                    cursor.execute(f"ALTER USER {target_user} CREATEDB")
+                    cursor.execute(f"ALTER USER {target_user} WITH REPLICATION")
+                    logger.info(f"✅ Usuário {target_user} criado com sucesso!")
+                else:
+                    logger.info(f"👤 Usuário {target_user} já existe. Atualizando senha...")
+                    cursor.execute(f"ALTER USER {target_user} WITH PASSWORD %s", (target_password,))
+                    cursor.execute(f"ALTER USER {target_user} CREATEDB")
+                    cursor.execute(f"ALTER USER {target_user} WITH REPLICATION")
+                    logger.info(f"✅ Credenciais do usuário {target_user} atualizadas!")
+                
+                # Verificar se banco existe
+                cursor.execute("SELECT 1 FROM pg_database WHERE datname = %s", (target_database,))
+                db_exists = cursor.fetchone()
+                
+                if not db_exists:
+                    logger.info(f"🗃️ Criando banco {target_database}...")
+                    cursor.execute(f"CREATE DATABASE {target_database} OWNER {target_user}")
+                    logger.info(f"✅ Banco {target_database} criado com sucesso!")
+                else:
+                    logger.info(f"🗃️ Banco {target_database} já existe. Garantindo ownership...")
+                    cursor.execute(f"ALTER DATABASE {target_database} OWNER TO {target_user}")
+                    logger.info(f"✅ Ownership do banco {target_database} atualizado!")
+                
+                # Garantir permissões no banco específico
+                cursor.execute(f"GRANT ALL PRIVILEGES ON DATABASE {target_database} TO {target_user}")
+                logger.info(f"🔐 Permissões concedidas ao usuário {target_user}")
+        
+        # Agora conectar no banco específico e configurar permissões de schema
+        target_config = {
+            'host': os.getenv('POSTGRES_HOST', 'postgres'),
+            'port': int(os.getenv('POSTGRES_PORT', '5432')),
+            'user': target_user,
+            'password': target_password,
+            'database': target_database
+        }
+        
+        with psycopg2.connect(**target_config) as conn:
+            conn.set_isolation_level(ISOLATION_LEVEL_AUTOCOMMIT)
+            with conn.cursor() as cursor:
+                logger.info(f"🔗 Conectado ao banco {target_database} como {target_user}")
+                
+                # Configurar permissões no schema public
+                cursor.execute(f"GRANT ALL ON SCHEMA public TO {target_user}")
+                cursor.execute(f"GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO {target_user}")
+                cursor.execute(f"GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO {target_user}")
+                cursor.execute(f"GRANT ALL PRIVILEGES ON ALL FUNCTIONS IN SCHEMA public TO {target_user}")
+                
+                # Configurar permissões padrão para objetos futuros
+                cursor.execute(f"ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO {target_user}")
+                cursor.execute(f"ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO {target_user}")
+                cursor.execute(f"ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON FUNCTIONS TO {target_user}")
+                
+                # Configurar parâmetros do banco
+                cursor.execute(f"ALTER DATABASE {target_database} SET timezone TO 'UTC'")
+                cursor.execute(f"ALTER DATABASE {target_database} SET default_transaction_isolation TO 'read committed'")
+                cursor.execute(f"ALTER DATABASE {target_database} SET client_encoding TO 'utf8'")
+                
+                logger.info(f"✅ Configuração PostgreSQL completa!")
+                
+        return True
+        
+    except Exception as e:
+        logger.error(f"❌ Erro ao configurar PostgreSQL: {e}")
+        return False
+
 def main():
     """Função principal"""
     logger.info("🚀 Iniciando configuração completa para produção...")
@@ -440,6 +540,11 @@ def main():
     # Passo 1: Aguardar banco
     if not wait_for_db():
         logger.error("❌ Falha na conexão com banco!")
+        sys.exit(1)
+    
+    # Passo 1.5: Garantir configuração PostgreSQL
+    if not ensure_postgres_setup():
+        logger.error("❌ Falha na configuração PostgreSQL!")
         sys.exit(1)
     
     # Passo 2: Importar modelos
