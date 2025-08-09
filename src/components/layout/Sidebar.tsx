@@ -1,157 +1,147 @@
+import React, { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { useAuth } from "@/contexts/AuthContext";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useLocation, useNavigate } from "react-router-dom";
+import { useAuth } from "@/contexts/AuthContext";
+import api from "@/services/api";
 import {
-  LayoutDashboard,
+  Home,
   DollarSign,
-  Package,
-  Truck,
-  ShoppingCart,
-  FileText,
-  Users,
-  HeadphonesIcon,
-  Store,
-  Building2,
-  ChevronDown,
-  ChevronRight,
-  Settings,
-  BarChart3,
   CreditCard,
-  Calculator,
-  Warehouse,
-  ClipboardList,
-  ShoppingBag,
   Receipt,
-  UserCheck,
-  MessageCircle
+  Package,
+  ShoppingCart,
+  Truck,
+  Building,
+  Users,
+  FileText,
+  BarChart3,
+  Settings,
+  ChevronRight,
+  ChevronDown,
+  Headphones,
+  Store
 } from "lucide-react";
-import { useState } from "react";
 
+// Definir tipos para os itens do menu
 interface MenuItem {
   title: string;
-  href: string;
-  icon: React.ComponentType<{ className?: string }>;
+  href?: string;
+  icon: React.ComponentType<any>;
   module?: string;
   permission?: string;
-  children?: MenuItem[];
+  submenu?: MenuItem[];
 }
 
+// Menu principal sem o painel admin (será adicionado dinamicamente)
 const menuItems: MenuItem[] = [
   {
     title: "Dashboard",
     href: "/app",
-    icon: LayoutDashboard,
+    icon: Home,
   },
   {
     title: "Financeiro",
-    href: "#",
     icon: DollarSign,
-    children: [
+    submenu: [
       {
         title: "Fluxo de Caixa",
-        href: "/app/fluxo-caixa",
+        href: "/app/financeiro/fluxo-caixa",
         icon: BarChart3,
-        module: "cash_flow",
+        module: "Fluxo de Caixa",
       },
       {
         title: "Contas a Receber",
-        href: "/app/contas-receber",
+        href: "/app/financeiro/contas-receber",
         icon: CreditCard,
-        module: "accounts_receivable",
+        module: "Contas a Receber",
       },
       {
         title: "Contas a Pagar",
-        href: "/app/contas-pagar",
-        icon: Calculator,
-        module: "accounts_payable",
+        href: "/app/financeiro/contas-pagar",
+        icon: Receipt,
+        module: "Contas a Pagar",
       },
-
       {
         title: "Contas",
-        href: "/app/contas",
-        icon: CreditCard,
-        module: "accounts",
+        href: "/app/financeiro/contas",
+        icon: Building,
+        module: "Fluxo de Caixa",
       },
+      // {
+      //   title: "Centro de Custos",
+      //   href: "/app/financeiro/centro-custos",
+      //   icon: BarChart3,
+      //   module: "Centro de Custos",
+      // },
     ],
   },
   {
     title: "Produtos",
     href: "/app/produtos",
     icon: Package,
-    module: "products",
+    module: "Produtos",
   },
   {
-    title: "Gestão de Estoque",
+    title: "Estoque",
     href: "/app/estoque",
-    icon: Warehouse,
-    module: "inventory",
+    icon: Package,
+    module: "Gestão de Estoque",
   },
   {
     title: "Fornecedores",
     href: "/app/fornecedores",
-    icon: Building2,
-    module: "suppliers",
-  },
-  {
-    title: "Compras",
-    href: "/app/compras",
-    icon: ShoppingCart,
-    module: "purchases",
-  },
-  {
-    title: "Expedição",
-    href: "/app/expedicao",
-    icon: Truck,
-    module: "shipping",
-  },
-  {
-    title: "Pedidos",
-    href: "/app/pedidos",
-    icon: ClipboardList,
-    module: "orders",
-  },
-  {
-    title: "Marketplace",
-    href: "/app/marketplace",
-    icon: Store,
-    module: "marketplace",
-  },
-  {
-    title: "Nota Fiscal",
-    href: "/app/nota-fiscal",
-    icon: Receipt,
-    module: "invoice",
+    icon: Building,
+    module: "Fornecedores",
   },
   {
     title: "Clientes",
     href: "/app/clientes",
     icon: Users,
-    module: "CLIENTES",
+    module: "Usuários",
+  },
+  {
+    title: "Compras",
+    href: "/app/compras",
+    icon: ShoppingCart,
+    module: "Compras",
+  },
+  {
+    title: "Expedição",
+    href: "/app/expedicao",
+    icon: Truck,
+    module: "Expedição",
+  },
+  {
+    title: "Pedidos",
+    href: "/app/pedidos",
+    icon: FileText,
+    module: "Pedidos",
+  },
+  {
+    title: "Marketplace",
+    href: "/app/marketplace",
+    icon: Store,
+    module: "Marketplace",
+  },
+  {
+    title: "Nota Fiscal",
+    href: "/app/nota-fiscal",
+    icon: FileText,
+    module: "Nota Fiscal",
   },
   {
     title: "Usuários",
     href: "/app/usuarios",
-    icon: UserCheck,
-    module: "users",
-    permission: "users:read",
+    icon: Users,
+    module: "Usuários",
   },
   {
     title: "Atendimento",
     href: "/app/atendimento",
-    icon: MessageCircle,
-    module: "support",
-  },
-  {
-    title: "Configurações",
-    href: "/app/configuracoes",
-    icon: Settings,
-  },
-  {
-    title: "Meu Plano",
-    href: "/app/plano",
-    icon: Package,
+    icon: Headphones,
+    module: "Atendimento",
   },
 ];
 
@@ -162,14 +152,32 @@ export function Sidebar({ className }: SidebarProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const [expandedItems, setExpandedItems] = useState<string[]>([]);
+  const [masterCompanyId, setMasterCompanyId] = useState<string | null>(null);
+
+  // Buscar ID da empresa master
+  useEffect(() => {
+    const fetchMasterCompanyId = async () => {
+      try {
+        const response = await api.get('/api/v1/admin/master-company-id');
+        setMasterCompanyId(response.data.master_company_id);
+      } catch (error) {
+        console.error('Erro ao buscar empresa master:', error);
+        setMasterCompanyId(null);
+      }
+    };
+
+    if (user) {
+      fetchMasterCompanyId();
+    }
+  }, [user]);
 
   // Adicionar painel admin apenas para master admin
   const allMenuItems = [
     ...menuItems,
     // Painel Admin apenas para master admin
-    ...(user?.company_id === '53b3051a-5d5f-4748-a475-b4447c49aeac' ? [{
+    ...(user?.role === 'admin' && masterCompanyId && user.company_id === masterCompanyId ? [{
       title: "Painel Admin",
-      href: "/app/admin",
+      href: "/admin/dashboard",
       icon: Settings,
       permission: "admin:access",
     }] : []),
@@ -222,11 +230,11 @@ export function Sidebar({ className }: SidebarProps) {
     }
 
     const isExpanded = expandedItems.includes(item.title);
-    const hasChildren = item.children && item.children.length > 0;
-    const isItemActive = isActive(item.href);
+    const hasChildren = item.submenu && item.submenu.length > 0;
+    const isItemActive = isActive(item.href || ''); // Use item.href || '' for active check
 
     if (hasChildren) {
-      const accessibleChildren = item.children.filter(child =>
+      const accessibleChildren = item.submenu.filter(child =>
         hasModuleAccess(child.module) && hasPermission(child.permission)
       );
 
@@ -258,13 +266,13 @@ export function Sidebar({ className }: SidebarProps) {
             <div className="ml-4 space-y-1">
               {accessibleChildren.map((child) => (
                 <Button
-                  key={child.href}
+                  key={child.href || child.title}
                   variant="ghost"
                   className={cn(
                     "w-full justify-start h-8 px-2 text-sm",
-                    isActive(child.href) && "bg-blue-600 text-white hover:bg-blue-700"
+                    isActive(child.href || '') && "bg-blue-600 text-white hover:bg-blue-700"
                   )}
-                  onClick={() => navigate(child.href)}
+                  onClick={() => navigate(child.href || '#')}
                 >
                   <child.icon className="h-4 w-4 mr-2" />
                   {child.title}
@@ -278,13 +286,13 @@ export function Sidebar({ className }: SidebarProps) {
 
     return (
       <Button
-        key={item.href}
+        key={item.href || item.title}
         variant="ghost"
         className={cn(
           "w-full justify-start h-10 px-2",
           isItemActive && "bg-blue-600 text-white hover:bg-blue-700"
         )}
-        onClick={() => navigate(item.href)}
+        onClick={() => navigate(item.href || '#')}
       >
         <item.icon className="h-4 w-4 mr-2" />
         <span className="text-sm font-medium">{item.title}</span>

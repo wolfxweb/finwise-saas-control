@@ -951,3 +951,67 @@ def get_plan_modules(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Erro ao obter módulos do plano: {str(e)}"
         ) 
+
+@router.get("/master-company-id")
+async def get_master_company_id(
+    db: Session = Depends(get_db)
+):
+    """Retorna o ID da empresa master para configuração do frontend"""
+    try:
+        master_company = db.query(Company).filter(
+            Company.cnpj == "00.000.000/0001-00"
+        ).first()
+        
+        if not master_company:
+            raise HTTPException(
+                status_code=404, 
+                detail="Empresa master não encontrada"
+            )
+        
+        return {
+            "master_company_id": str(master_company.id),
+            "company_name": master_company.name
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Erro ao buscar empresa master: {str(e)}"
+        )
+
+@router.get("/verify-master-admin")
+async def verify_master_admin(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Verifica se o usuário atual é um master admin"""
+    try:
+        # Buscar empresa master
+        master_company = db.query(Company).filter(
+            Company.cnpj == "00.000.000/0001-00"
+        ).first()
+        
+        if not master_company:
+            return {
+                "is_master_admin": False,
+                "message": "Empresa master não encontrada"
+            }
+        
+        # Verificar se o usuário é admin e pertence à empresa master
+        is_master_admin = (
+            current_user.role == "admin" and 
+            current_user.company_id == master_company.id
+        )
+        
+        return {
+            "is_master_admin": is_master_admin,
+            "user_role": current_user.role,
+            "user_company_id": str(current_user.company_id),
+            "master_company_id": str(master_company.id),
+            "message": "Master admin" if is_master_admin else "Não é master admin"
+        }
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Erro ao verificar permissões: {str(e)}"
+        ) 

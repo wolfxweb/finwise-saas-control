@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
+import api from '@/services/api';
 
 interface AdminProtectedRouteProps {
   children: React.ReactNode;
@@ -8,9 +9,32 @@ interface AdminProtectedRouteProps {
 
 const AdminProtectedRoute: React.FC<AdminProtectedRouteProps> = ({ children }) => {
   const { user, isAuthenticated, isLoading } = useAuth();
+  const [masterCompanyId, setMasterCompanyId] = useState<string | null>(null);
+  const [isLoadingMasterCompany, setIsLoadingMasterCompany] = useState(true);
+
+  // Buscar ID da empresa master
+  useEffect(() => {
+    const fetchMasterCompanyId = async () => {
+      try {
+        const response = await api.get('/api/v1/admin/master-company-id');
+        setMasterCompanyId(response.data.master_company_id);
+      } catch (error) {
+        console.error('Erro ao buscar empresa master:', error);
+        setMasterCompanyId(null);
+      } finally {
+        setIsLoadingMasterCompany(false);
+      }
+    };
+
+    if (isAuthenticated && user) {
+      fetchMasterCompanyId();
+    } else {
+      setIsLoadingMasterCompany(false);
+    }
+  }, [isAuthenticated, user]);
 
   // Verificar se está carregando
-  if (isLoading) {
+  if (isLoading || isLoadingMasterCompany) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
@@ -31,9 +55,8 @@ const AdminProtectedRoute: React.FC<AdminProtectedRouteProps> = ({ children }) =
     return <Navigate to="/admin/login" replace />;
   }
 
-  // Verificar se é da empresa master (FinanceMax System)
-  const isMasterAdmin = user.company_id === '53b3051a-5d5f-4748-a475-b4447c49aeac';
-  if (!isMasterAdmin) {
+  // Verificar se é da empresa master
+  if (!masterCompanyId || user.company_id !== masterCompanyId) {
     return <Navigate to="/admin/login" replace />;
   }
 

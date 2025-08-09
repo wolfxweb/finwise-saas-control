@@ -26,6 +26,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { adminAPI } from '@/services/api';
+import api from '@/services/api';
 import { Navigate } from 'react-router-dom';
 
 interface BillingSummary {
@@ -104,13 +105,32 @@ const BillingManagement = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [companyFilter, setCompanyFilter] = useState('all');
 
+  const [masterCompanyId, setMasterCompanyId] = useState<string | null>(null);
+  const [isLoadingMasterCompany, setIsLoadingMasterCompany] = useState(true);
+
+  // Buscar ID da empresa master
+  useEffect(() => {
+    const fetchMasterCompanyId = async () => {
+      try {
+        const response = await api.get('/api/v1/admin/master-company-id');
+        setMasterCompanyId(response.data.master_company_id);
+      } catch (error) {
+        console.error('Erro ao buscar empresa master:', error);
+        setMasterCompanyId(null);
+      } finally {
+        setIsLoadingMasterCompany(false);
+      }
+    };
+
+    fetchMasterCompanyId();
+  }, []);
+
   // Verificar se é admin master
   if (!user || user.role !== 'admin') {
     return <Navigate to="/app" replace />;
   }
 
-  const isMasterAdmin = user.company_id === '53b3051a-5d5f-4748-a475-b4447c49aeac';
-  if (!isMasterAdmin) {
+  if (!isLoadingMasterCompany && (!masterCompanyId || user.company_id !== masterCompanyId)) {
     return <Navigate to="/app" replace />;
   }
 

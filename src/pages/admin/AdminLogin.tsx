@@ -7,16 +7,31 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Loader2, Shield, Building2, Users, Settings } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
-
-const MASTER_COMPANY_ID = '53b3051a-5d5f-4748-a475-b4447c49aeac';
+import api from '@/services/api';
 
 const AdminLogin = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+  const [masterCompanyId, setMasterCompanyId] = useState<string | null>(null);
   const navigate = useNavigate();
   const { login, user, isAuthenticated, isLoading: authLoading } = useAuth();
+
+  // Buscar ID da empresa master
+  useEffect(() => {
+    const fetchMasterCompanyId = async () => {
+      try {
+        const response = await api.get('/api/v1/admin/master-company-id');
+        setMasterCompanyId(response.data.master_company_id);
+      } catch (error) {
+        console.error('Erro ao buscar empresa master:', error);
+        setMasterCompanyId(null);
+      }
+    };
+
+    fetchMasterCompanyId();
+  }, []);
 
   // Redireciona automaticamente se já estiver autenticado como admin master
   useEffect(() => {
@@ -26,12 +41,13 @@ const AdminLogin = () => {
       isAuthenticated &&
       user &&
       user.role === 'admin' &&
-      user.company_id === MASTER_COMPANY_ID
+      masterCompanyId &&
+      user.company_id === masterCompanyId
     ) {
       console.log('Redirecionando para dashboard...');
       navigate('/admin/dashboard', { replace: true });
     }
-  }, [isAuthenticated, user, navigate, authLoading]);
+  }, [isAuthenticated, user, navigate, authLoading, masterCompanyId]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

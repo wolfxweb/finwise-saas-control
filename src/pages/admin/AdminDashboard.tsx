@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { adminAPI } from '@/services/api';
+import api from '@/services/api';
 import { Navigate } from 'react-router-dom';
 
 interface Company {
@@ -68,24 +69,43 @@ const AdminDashboard = () => {
     totalRevenue: 0,
     totalUsers: 0
   });
-
+  const [masterCompanyId, setMasterCompanyId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingMasterCompany, setIsLoadingMasterCompany] = useState(true);
+
+  // Buscar ID da empresa master
+  useEffect(() => {
+    const fetchMasterCompanyId = async () => {
+      try {
+        const response = await api.get('/api/v1/admin/master-company-id');
+        setMasterCompanyId(response.data.master_company_id);
+      } catch (error) {
+        console.error('Erro ao buscar empresa master:', error);
+        setMasterCompanyId(null);
+      } finally {
+        setIsLoadingMasterCompany(false);
+      }
+    };
+
+    fetchMasterCompanyId();
+  }, []);
 
   // Verificar se é admin master (apenas para empresa master)
   if (!user || user.role !== 'admin') {
     return <Navigate to="/app" replace />;
   }
 
-  // Verificar se é admin da empresa master (FinanceMax System)
-  const isMasterAdmin = user.company_id === '53b3051a-5d5f-4748-a475-b4447c49aeac';
-  if (!isMasterAdmin) {
+  // Verificar se é admin da empresa master
+  if (!isLoadingMasterCompany && (!masterCompanyId || user.company_id !== masterCompanyId)) {
     return <Navigate to="/app" replace />;
   }
 
   useEffect(() => {
     // Carregar dados do painel administrativo
-    loadAdminData();
-  }, []);
+    if (masterCompanyId) {
+      loadAdminData();
+    }
+  }, [masterCompanyId]);
 
   const loadAdminData = async () => {
     try {
