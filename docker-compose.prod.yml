@@ -4,9 +4,7 @@ services:
   postgres:
     image: postgres:15-alpine
     environment:
-      # Configuração principal do PostgreSQL
-      POSTGRES_DB: ${POSTGRES_DB:-finwise_saas_db}
-      POSTGRES_USER: ${POSTGRES_USER:-finwise_user}
+      # Configuração principal do PostgreSQL - O PostgreSQL sempre cria o usuário postgres com esta senha
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-finwise_password}
       PGDATA: /var/lib/postgresql/data/pgdata
       
