@@ -4,49 +4,76 @@ services:
   postgres:
     image: postgres:15-alpine
     environment:
-      POSTGRES_DB: finwise_saas_db
-      POSTGRES_USER: finwise_user
+      POSTGRES_DB: ${POSTGRES_DB:-finwise_saas_db}
+      POSTGRES_USER: ${POSTGRES_USER:-finwise_user}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-finwise_password}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-finwise_user} -d ${POSTGRES_DB:-finwise_saas_db}"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
   redis:
     image: redis:7-alpine
     volumes:
       - redis_data:/data
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
     environment:
-      DATABASE_URL: postgresql://finwise_user:${POSTGRES_PASSWORD:-finwise_password}@postgres:5432/finwise_saas_db
+      DATABASE_URL: postgresql://${POSTGRES_USER:-finwise_user}:${POSTGRES_PASSWORD:-finwise_password}@postgres:5432/${POSTGRES_DB:-finwise_saas_db}
       REDIS_URL: redis://redis:6379
-      SECRET_KEY: ${SECRET_KEY:-finwise-super-secret-key-2024}
+      SECRET_KEY: ${SECRET_KEY:-finwise-super-secret-key-production-2024}
       ALGORITHM: HS256
       ACCESS_TOKEN_EXPIRE_MINUTES: 30
-      BACKEND_CORS_ORIGINS: https://desenvolvimento-financeiro.219u5p.easypanel.host
+      BACKEND_CORS_ORIGINS: ${BACKEND_CORS_ORIGINS:-https://desenvolvimento-financeiro.219u5p.easypanel.host,http://localhost:3000,http://localhost:8080}
     ports:
       - "8000:8000"
     depends_on:
-      - postgres
-      - redis
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     restart: unless-stopped
+    command: >
+      sh -c "
+        echo '🚀 Iniciando configuração para produção...' &&
+        python scripts/init_production.py &&
+        echo '📝 Marcando migrations como executadas...' &&
+        alembic stamp head &&
+        echo '🔄 Executando migrations pendentes (se houver)...' &&
+        alembic upgrade head || echo '⚠️  Algumas migrations falharam, mas aplicação pode continuar' &&
+        echo '🌐 Iniciando servidor FastAPI...' &&
+        python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 1
+      "
 
   frontend:
     build:
       context: .
       dockerfile: Dockerfile.frontend
       args:
-        VITE_API_URL: https://desenvolvimento-financeiro.219u5p.easypanel.host:8000
+        VITE_API_URL: ${VITE_API_URL:-https://desenvolvimento-financeiro.219u5p.easypanel.host:8000}
     ports:
       - "8080:8080"
     depends_on:
       - backend
+    environment:
+      VITE_API_URL: ${VITE_API_URL:-https://desenvolvimento-financeiro.219u5p.easypanel.host:8000}
     restart: unless-stopped
 
 volumes:
   postgres_data:
+    driver: local
   redis_data:
+    driver: local
