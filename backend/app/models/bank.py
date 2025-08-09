@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text, ForeignKey
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from ..core.database import Base
@@ -8,7 +8,8 @@ class Bank(Base):
     __tablename__ = "banks"
     
     id = Column(Integer, primary_key=True, index=True)
-    company_id = Column(postgresql.UUID(as_uuid=True), nullable=False)
+    # CORRIGIDO: Adicionado ForeignKey que estava faltando
+    company_id = Column(postgresql.UUID(as_uuid=True), ForeignKey("companies.id"), nullable=False)
     name = Column(String(255), nullable=False)
     code = Column(String(10), nullable=False)
     website = Column(String(255), nullable=True)

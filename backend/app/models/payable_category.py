@@ -1,7 +1,9 @@
 from sqlalchemy import Column, Integer, String, Text, Boolean, DateTime, ForeignKey, Index
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from ..core.database import Base
+import uuid
 
 
 class PayableCategory(Base):
@@ -14,7 +16,8 @@ class PayableCategory(Base):
     parent_id = Column(Integer, ForeignKey("payable_categories.id"), nullable=True)
     is_active = Column(Boolean, default=True, nullable=False)
     sort_order = Column(Integer, default=0, nullable=False)
-    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False)
+    # CORRIGIDO: Usando UUID em vez de Integer
+    company_id = Column(UUID(as_uuid=True), ForeignKey("companies.id"), nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
 

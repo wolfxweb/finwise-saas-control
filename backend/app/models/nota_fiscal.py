@@ -1,7 +1,9 @@
 from sqlalchemy import Column, Integer, String, Float, DateTime, Text, Boolean, ForeignKey, JSON
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.core.database import Base
+import uuid
 
 
 class NotaFiscal(Base):
@@ -65,8 +67,8 @@ class NotaFiscal(Base):
     xml_content = Column(Text, nullable=True)  # XML completo da nota
     xml_filename = Column(String(255), nullable=True)
     
-    # Relacionamentos
-    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False)
+    # Relacionamentos - CORRIGIDO: Usando UUID em vez de Integer
+    company_id = Column(UUID(as_uuid=True), ForeignKey("companies.id"), nullable=False)
     company = relationship("Company", back_populates="notas_fiscais")
     
     # Produtos (relacionamento one-to-many)
