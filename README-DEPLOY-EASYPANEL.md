@@ -19,27 +19,28 @@ Certifique-se que estes arquivos estão no seu repositório:
 - `init-db.sql` ✅
 - `backend/scripts/init_production.py` ✅
 - `production.env.example` ✅
+- `fix_postgres_prod.sh` ✅ **NOVO!**
 
 ## 🌐 URL de Deploy
 
 Seu projeto será acessível em:
-- **Frontend**: https://desenvolvimento-financeiro.219u5p.easypanel.host/
-- **API**: https://desenvolvimento-financeiro.219u5p.easypanel.host:8000
-- **Admin**: https://desenvolvimento-financeiro.219u5p.easypanel.host/admin/login
+- **Frontend**: https://desenvolvimento-finan.219u5p.easypanel.host/
+- **API**: https://desenvolvimento-finan.219u5p.easypanel.host:8000
+- **Admin**: https://desenvolvimento-finan.219u5p.easypanel.host/admin/login
 
 ## ⚙️ Configuração no EasyPanel
 
 ### 1. **Variáveis de Ambiente Obrigatórias**
 ```bash
 # === OBRIGATÓRIAS ===
-SECRET_KEY=finwise-super-secret-key-production-2024-MUDE-ESTA-CHAVE
+SECRET_KEY=finwise-super-secret-key-production-2024-GERE-UM-TOKEN-UNICO
 POSTGRES_PASSWORD=SuaSenhaPostgresMuitoSegura123!
-VITE_API_URL=https://desenvolvimento-financeiro.219u5p.easypanel.host:8000
+VITE_API_URL=https://desenvolvimento-finan.219u5p.easypanel.host:8000
 
 # === OPCIONAIS (com valores padrão) ===
 POSTGRES_DB=finwise_saas_db
 POSTGRES_USER=finwise_user
-BACKEND_CORS_ORIGINS=https://desenvolvimento-financeiro.219u5p.easypanel.host
+BACKEND_CORS_ORIGINS=https://desenvolvimento-finan.219u5p.easypanel.host
 ```
 
 ### 2. **Configuração no Painel EasyPanel**
@@ -48,6 +49,14 @@ BACKEND_CORS_ORIGINS=https://desenvolvimento-financeiro.219u5p.easypanel.host
 3. Selecionar `docker-compose.prod.yml`
 4. Adicionar variáveis de ambiente
 5. Fazer deploy
+
+### 3. **🔧 NOVO: Script de Correção PostgreSQL**
+Se ainda encontrar erro de autenticação, use o script:
+```bash
+# No servidor de produção
+chmod +x fix_postgres_prod.sh
+./fix_postgres_prod.sh
+```
 
 ## 🚀 Como Funciona a Inicialização
 
@@ -101,6 +110,11 @@ BACKEND_CORS_ORIGINS=https://desenvolvimento-financeiro.219u5p.easypanel.host
 - **Empresa master** criada
 - **Usuário master** com credenciais corretas
 
+### ✅ **Script de Correção Automático**
+- **fix_postgres_prod.sh** resolve problemas manualmente
+- **Detecção automática** de containers
+- **Configuração completa** em um comando
+
 ## 💾 Volumes Persistentes
 
 O sistema usa volumes Docker para persistir dados:
@@ -148,6 +162,12 @@ docker logs finwise-postgres
 - ✅ **Testa conectividade** PostgreSQL primeiro
 - ✅ **Verifica permissões** antes de prosseguir
 
+**🔧 NOVA SOLUÇÃO: Script Automático**
+```bash
+# Execute no servidor
+./fix_postgres_prod.sh
+```
+
 **Logs esperados durante o retry:**
 ```bash
 🔐 Tentativa 1/60 - Erro de autenticação. Aguardando PostgreSQL configurar credenciais...
@@ -172,12 +192,13 @@ docker logs finwise-postgres
 1. **Verificar variáveis de ambiente**
 2. **Verificar logs**: `docker logs container-name`
 3. **Verificar healthchecks**: PostgreSQL e Redis
+4. **Usar script de correção**: `./fix_postgres_prod.sh`
 
 ### ❌ **Erro de CORS**
 
 Verificar se `BACKEND_CORS_ORIGINS` inclui a URL correta:
 ```bash
-BACKEND_CORS_ORIGINS=https://desenvolvimento-financeiro.219u5p.easypanel.host
+BACKEND_CORS_ORIGINS=https://desenvolvimento-finan.219u5p.easypanel.host
 ```
 
 ## 💾 Backup Recomendado
@@ -203,7 +224,7 @@ O EasyPanel fornece automaticamente:
 
 Após deploy bem-sucedido:
 
-1. **Acesse**: https://desenvolvimento-financeiro.219u5p.easypanel.host/admin/login
+1. **Acesse**: https://desenvolvimento-finan.219u5p.easypanel.host/admin/login
 2. **Login**: `wolfxweb@gmail.com`
 3. **Senha**: `wolfx2020`
 4. **Painel Master**: Acesso completo ao sistema
@@ -216,6 +237,7 @@ Após deploy bem-sucedido:
 - [ ] `docker-compose.prod.yml` commitado  
 - [ ] `init-db.sql` commitado
 - [ ] `backend/scripts/init_production.py` atualizado
+- [ ] `fix_postgres_prod.sh` disponível ✅ **NOVO!**
 - [ ] Repository conectado no EasyPanel
 - [ ] Deploy executado
 - [ ] Logs verificados (sem erros)

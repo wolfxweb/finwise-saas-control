@@ -20,7 +20,7 @@ services:
     ports:
       - "5432:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-finwise_user} -d ${POSTGRES_DB:-finwise_saas_db} -h localhost"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -h localhost"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -35,6 +35,54 @@ services:
       -c wal_level=replica
       -c max_wal_senders=3
       -c checkpoint_completion_target=0.7
+
+  postgres-setup:
+    image: postgres:15-alpine
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-finwise_password}
+      POSTGRES_USER: ${POSTGRES_USER:-finwise_user}
+      POSTGRES_DB: ${POSTGRES_DB:-finwise_saas_db}
+    command: >
+      sh -c "
+        echo '🔧 Configurando PostgreSQL automaticamente...' &&
+        sleep 5 &&
+        echo '👤 Criando usuário e banco finwise...' &&
+        PGPASSWORD=${POSTGRES_PASSWORD:-finwise_password} psql -h postgres -U postgres -c \"
+          DO \$$\$$
+          BEGIN
+            IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '${POSTGRES_USER:-finwise_user}') THEN
+              CREATE USER ${POSTGRES_USER:-finwise_user} WITH PASSWORD '${POSTGRES_PASSWORD:-finwise_password}';
+              ALTER USER ${POSTGRES_USER:-finwise_user} CREATEDB;
+              ALTER USER ${POSTGRES_USER:-finwise_user} WITH REPLICATION;
+              RAISE NOTICE 'Usuário ${POSTGRES_USER:-finwise_user} criado';
+            ELSE
+              ALTER USER ${POSTGRES_USER:-finwise_user} WITH PASSWORD '${POSTGRES_PASSWORD:-finwise_password}';
+              ALTER USER ${POSTGRES_USER:-finwise_user} CREATEDB;
+              ALTER USER ${POSTGRES_USER:-finwise_user} WITH REPLICATION;
+              RAISE NOTICE 'Usuário ${POSTGRES_USER:-finwise_user} atualizado';
+            END IF;
+          END
+          \$$\$$;\" &&
+        PGPASSWORD=${POSTGRES_PASSWORD:-finwise_password} psql -h postgres -U postgres -c \"
+          SELECT 'CREATE DATABASE ${POSTGRES_DB:-finwise_saas_db} OWNER ${POSTGRES_USER:-finwise_user}'
+          WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = '${POSTGRES_DB:-finwise_saas_db}');\" | grep CREATE | sh &&
+        PGPASSWORD=${POSTGRES_PASSWORD:-finwise_password} psql -h postgres -U postgres -c \"
+          ALTER DATABASE ${POSTGRES_DB:-finwise_saas_db} OWNER TO ${POSTGRES_USER:-finwise_user};
+          GRANT ALL PRIVILEGES ON DATABASE ${POSTGRES_DB:-finwise_saas_db} TO ${POSTGRES_USER:-finwise_user};\" &&
+        echo '🔐 Configurando permissões...' &&
+        PGPASSWORD=${POSTGRES_PASSWORD:-finwise_password} psql -h postgres -U ${POSTGRES_USER:-finwise_user} -d ${POSTGRES_DB:-finwise_saas_db} -c \"
+          GRANT ALL ON SCHEMA public TO ${POSTGRES_USER:-finwise_user};
+          ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO ${POSTGRES_USER:-finwise_user};
+          ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO ${POSTGRES_USER:-finwise_user};
+          ALTER DATABASE ${POSTGRES_DB:-finwise_saas_db} SET timezone TO 'UTC';\" &&
+        echo '✅ PostgreSQL configurado com sucesso!' &&
+        echo '🧪 Testando conexão final...' &&
+        PGPASSWORD=${POSTGRES_PASSWORD:-finwise_password} psql -h postgres -U ${POSTGRES_USER:-finwise_user} -d ${POSTGRES_DB:-finwise_saas_db} -c 'SELECT current_user, current_database();' &&
+        echo '🎉 Configuração PostgreSQL COMPLETA!'
+      "
 
   redis:
     image: redis:7-alpine
@@ -85,21 +133,15 @@ services:
     ports:
       - "8000:8000"
     depends_on:
-      postgres:
-        condition: service_healthy
+      postgres-setup:
+        condition: service_completed_successfully
       redis:
         condition: service_healthy
     restart: unless-stopped
     command: >
       sh -c "
         echo '🚀 Iniciando configuração para produção...' &&
-        echo '⏳ Aguardando serviços dependentes por mais tempo...' &&
-        sleep 30 &&
-        echo '🔍 Testando conexão com PostgreSQL...' &&
-        until pg_isready -h postgres -p 5432 -U ${POSTGRES_USER:-finwise_user}; do
-          echo '⏳ PostgreSQL ainda não está pronto... aguardando...'
-          sleep 5
-        done &&
+        echo '✅ PostgreSQL já foi configurado pelo postgres-setup!' &&
         echo '🔧 Executando script de inicialização...' &&
         python scripts/init_production.py &&
         echo '📝 Configurando Alembic...' &&
