@@ -107,20 +107,20 @@ def create_initial_modules():
         from app.models.plan import Module
         
         modules_data = [
-            {"name": "Fluxo de Caixa", "description": "Controle completo de entrada e saída de recursos financeiros"},
-            {"name": "Contas a Receber", "description": "Gestão de valores a receber de clientes"},
-            {"name": "Contas a Pagar", "description": "Controle de contas e compromissos a pagar"},
-            {"name": "Centro de Custos", "description": "Organização e controle de centros de custos"},
-            {"name": "Produtos", "description": "Cadastro e gestão completa de produtos"},
-            {"name": "Gestão de Estoque", "description": "Controle de movimentação e saldo de estoque"},
-            {"name": "Fornecedores", "description": "Cadastro e gestão de fornecedores"},
-            {"name": "Compras", "description": "Gestão do processo de compras"},
-            {"name": "Expedição", "description": "Controle de expedição e envios"},
-            {"name": "Pedidos", "description": "Gestão de pedidos de venda"},
-            {"name": "Marketplace", "description": "Integração com marketplaces"},
-            {"name": "Nota Fiscal", "description": "Emissão e controle de notas fiscais"},
-            {"name": "Usuários", "description": "Gestão de usuários do sistema"},
-            {"name": "Atendimento", "description": "Sistema de atendimento ao cliente"},
+            {"name": "Fluxo de Caixa", "code": "CASH_FLOW", "description": "Controle completo de entrada e saída de recursos financeiros", "price": 0.0, "category": "financial"},
+            {"name": "Contas a Receber", "code": "ACCOUNTS_RECEIVABLE", "description": "Gestão de valores a receber de clientes", "price": 0.0, "category": "financial"},
+            {"name": "Contas a Pagar", "code": "ACCOUNTS_PAYABLE", "description": "Controle de contas e compromissos a pagar", "price": 0.0, "category": "financial"},
+            {"name": "Centro de Custos", "code": "COST_CENTER", "description": "Organização e controle de centros de custos", "price": 0.0, "category": "financial"},
+            {"name": "Produtos", "code": "PRODUCTS", "description": "Cadastro e gestão completa de produtos", "price": 0.0, "category": "inventory"},
+            {"name": "Gestão de Estoque", "code": "INVENTORY", "description": "Controle de movimentação e saldo de estoque", "price": 0.0, "category": "inventory"},
+            {"name": "Fornecedores", "code": "SUPPLIERS", "description": "Cadastro e gestão de fornecedores", "price": 0.0, "category": "management"},
+            {"name": "Compras", "code": "PURCHASES", "description": "Gestão do processo de compras", "price": 0.0, "category": "operations"},
+            {"name": "Expedição", "code": "SHIPPING", "description": "Controle de expedição e envios", "price": 0.0, "category": "operations"},
+            {"name": "Pedidos", "code": "ORDERS", "description": "Gestão de pedidos de venda", "price": 0.0, "category": "sales"},
+            {"name": "Marketplace", "code": "MARKETPLACE", "description": "Integração com marketplaces", "price": 0.0, "category": "sales"},
+            {"name": "Nota Fiscal", "code": "INVOICES", "description": "Emissão e controle de notas fiscais", "price": 0.0, "category": "fiscal"},
+            {"name": "Usuários", "code": "USERS", "description": "Gestão de usuários do sistema", "price": 0.0, "category": "management"},
+            {"name": "Atendimento", "code": "SUPPORT", "description": "Sistema de atendimento ao cliente", "price": 0.0, "category": "management"},
         ]
         
         for module_data in modules_data:
